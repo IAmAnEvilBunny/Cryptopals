@@ -4,8 +4,6 @@ Created on 23/06/2022
 @author: Lawrence Arscott
 """
 
-## Converting from hex to base 64
-
 from numpy import product as prod
 from base64 import b64encode, b64decode
 from Crypto.Cipher import AES

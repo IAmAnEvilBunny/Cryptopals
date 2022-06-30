@@ -1,4 +1,4 @@
-from Cryptopals import *
+from Cryptopals_main import *
 
 ## Challenge 1-1
 # Declare byte

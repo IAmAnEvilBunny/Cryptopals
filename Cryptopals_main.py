@@ -72,6 +72,39 @@ def rand_bytes(n):
         rand += rand_int.to_bytes(1, 'big')  # to_bytes: int -> byte
     return rand
 
+# Break static
+def block_size(fun_oracle, max_n=64):
+    for i in range(1, max_n + 1):
+        indent = b'A' * i
+        if fun_oracle(b'') == fun_oracle(indent)[i:]:
+            print(f'Block size is {i}')
+            return i
+
+def break_repeating(fun_oracle):
+    b_size = block_size(fun_oracle)
+    sol_len = len(fun_oracle(b''))
+    assert sol_len % b_size == 0
+    n_blocks = len(fun_oracle(b'')) // b_size
+    sol = b''
+
+    for k in range(n_blocks):
+        for i in range(b_size):
+            new_byte = br_solve_byte(fun_oracle, sol, b_size, i, k)
+            if not new_byte and k == n_blocks - 1:
+                print('stopped during final block')
+                break
+            sol += new_byte
+
+    print(sol)
+
+def br_solve_byte(fun_oracle, sol, b_size, i, k):
+    indent = k * b_size
+    dummy = b'A' * (b_size - 1 - i)
+    find = fun_oracle(dummy)[indent:b_size + indent]
+    for i in range(256):
+        byt = dummy + sol + i.to_bytes(1, 'big')
+        if fun_oracle(byt)[indent:b_size + indent] == find:
+            return i.to_bytes(1, 'big')
 
 # Text formatting
 def single_line_read2(txtfile):
@@ -322,7 +355,6 @@ class AESCode:
         if letsunpad:
             ans = unpad(ans, AES.block_size)
 
-        print(ans.decode())
         return ans.decode()
 
     def block_list(self):
@@ -341,12 +373,11 @@ class AESCode:
         return count
 
     def ecb_encrypt(self, key, padding=True):
-        cipher = AES.new(key, AES.MODE_ECB)
+        self.gen_cipher(key)
         if padding:
             self.easybyte.b = pad(self.easybyte.b, AES.block_size)
-        new = AESCode(cipher.encrypt(self.easybyte.b))
-        new.cipher = cipher
-        return new
+        self.easybyte.b = self.cipher.encrypt(self.easybyte.b)
+        return self
 
     def cbc_encrypt(self, key, iv):
         self.gen_cipher(key)
@@ -376,6 +407,12 @@ class AESCode:
         sol = unpad(sol, AES.block_size)
         print(sol.decode())
         return sol.decode()
+
+    def oracle(self, bstring):
+        to_be_encrypted = pad(bstring + self.ecb_solve().encode(), AES.block_size)
+        encrypted = self.cipher.encrypt(to_be_encrypted)
+        bencrypted = EasyByte(encrypted)
+        return bencrypted.b
 
 class ListECB:
     def __init__(self, code_file, base=None):

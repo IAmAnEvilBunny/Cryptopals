@@ -4,10 +4,13 @@ Created on 23/06/2022
 @author: Lawrence Arscott
 """
 
+## Converting from hex to base 64
+
+from random import randint
 from numpy import product as prod
 from base64 import b64encode, b64decode
 from Crypto.Cipher import AES
-#from Crypto.Util.Padding import unpad
+from Crypto.Util.Padding import pad, unpad
 from os import path
 
 
@@ -60,6 +63,15 @@ def binary(n, scale):
     """
     assert 0 <= int(n, scale) < 256  # So that integer may be written as a byte
     return bin(int(n, scale))[2:].zfill(8)
+
+def rand_bytes(n):
+    # Returns a byte string composed of n random bytes
+    rand = b''
+    for i in range(n):
+        rand_int = randint(0, 255)  # Obtain random integer representing a byte
+        rand += rand_int.to_bytes(1, 'big')  # to_bytes: int -> byte
+    return rand
+
 
 # Text formatting
 def single_line_read2(txtfile):
@@ -190,9 +202,14 @@ class VCode:
     def gen_keys(self, space_test=True, char_test=True, keys=None):
         self.keys = VCode.test_keys(self, keys, space_test, char_test)
 
+    def use_keys(self):
+        for key in self.keys:
+            print(self.easybyte.xor(key).convert('text'))
+
     def single_byte_keys(self, space_test=True, char_test=True):
         keys = [int(i).to_bytes(1, byteorder='big') for i in range(256)]
-        return self.test_keys(keys, space_test, char_test)
+        self.keys = self.test_keys(keys, space_test, char_test)
+        return self
 
     def test_keys(self, keys, space_test=True, char_test=True):
         passed = []
@@ -203,7 +220,6 @@ class VCode:
                 # Check whether answer passes tests before yielding
                 if not space_test or simple_space_test(s):
                     if not char_test or simple_ch_test(s):
-                        print(s)
                         passed.append(key)
 
             except ValueError:  # Sometimes there is no corresponding ASCII unicode character
@@ -230,11 +246,12 @@ class VCode:
 
     def find_v_key(self, key_l):
         # Given a key length, returns plausible Vigenère keys of that length
+        print(f'Searching for repeating key of length {key_l}')
         strips = self.split(key_l)
         keys_by_strip = []
 
         for strip in strips:
-            keys_by_strip.append(strip.single_byte_keys(True, True))
+            keys_by_strip.append(strip.single_byte_keys(True, True).keys)
 
         possibilities = prod([len(keys) for keys in keys_by_strip])
         print(f"Found {possibilities} plausible key(s)")
@@ -282,29 +299,37 @@ class ListVCode:
             code = self.codes[i]
             if code.simple_freq_test():
                 print(i)
-                code.single_byte_keys()
+                code = code.single_byte_keys()
+                code.use_keys()
 
-class ECBCode:
+class AESCode:
     def __init__(self, code, base=None):
         self.easybyte = EasyByte(code, base)
         self.cipher = None
+        self.iv = None
 
     def gen_cipher(self, key):
+        # Generates cipher according to key
+        # May request random key by entering key as the string 'random'
+        if key == 'random':
+            key = rand_bytes(16)
         self.cipher = AES.new(key, AES.MODE_ECB)
 
-    def solve(self):
+    def ecb_solve(self, letsunpad=True):
         ans = self.cipher.decrypt(self.easybyte.b)
 
         # Unpad removes padding originally added to make the message a multiple of 128 bits
-        #ans = unpad(ans, AES.block_size)
+        if letsunpad:
+            ans = unpad(ans, AES.block_size)
 
         print(ans.decode())
+        return ans.decode()
 
-    # New
     def block_list(self):
         blen = len(self.easybyte.b)
         assert blen % 16 == 0
-        return [EasyByte(self.easybyte.b[i:i + 16]) for i in range(blen)]
+        nblocks = blen//16
+        return [EasyByte(self.easybyte.b[16*i:16*i + 16]) for i in range(nblocks)]
 
     def repeat(self):
         count = 0
@@ -315,10 +340,47 @@ class ECBCode:
                     count += 1
         return count
 
+    def ecb_encrypt(self, key, padding=True):
+        cipher = AES.new(key, AES.MODE_ECB)
+        if padding:
+            self.easybyte.b = pad(self.easybyte.b, AES.block_size)
+        new = AESCode(cipher.encrypt(self.easybyte.b))
+        new.cipher = cipher
+        return new
+
+    def cbc_encrypt(self, key, iv):
+        self.gen_cipher(key)
+        self.iv = iv
+        self.easybyte.b = pad(self.easybyte.b, AES.block_size)  # pad
+        blocks = self.block_list()
+        prev_cipher_block = iv
+        gibberish = b''
+        for i in range(len(blocks)):
+            new_easybyte = blocks[i].xor(prev_cipher_block)
+            new_code = self.cipher.encrypt(new_easybyte.b)
+            gibberish += new_code
+            prev_cipher_block = new_code
+        self.easybyte = EasyByte(gibberish)
+        return self
+
+    def cbc_solve(self):
+        blocks = self.block_list()
+        sol = b''
+        for i in range(1, len(blocks)):
+            deciphered = self.cipher.decrypt(blocks[i].b)
+            unxored = xorb(deciphered, blocks[i-1].b)
+            sol += unxored
+        pos1deciphered = self.cipher.decrypt(blocks[0].b)
+        pos1unxored = xorb(pos1deciphered, self.iv)
+        sol = pos1unxored + sol
+        sol = unpad(sol, AES.block_size)
+        print(sol.decode())
+        return sol.decode()
+
 class ListECB:
     def __init__(self, code_file, base=None):
         with open(code_file) as file:
-            self.codes = [ECBCode(line, base) for line in file]
+            self.codes = [AESCode(line, base) for line in file]
 
     def simple_repeat_test(self):
         for k in range(len(self.codes)):

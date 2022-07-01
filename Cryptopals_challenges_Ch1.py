@@ -91,7 +91,7 @@ C1_6.solve()
 ## Challenge 1-7:
 C1_7 = AESCode('Challenge_1-7.txt', 'b64')
 C1_7.gen_cipher(b'YELLOW SUBMARINE')
-C1_7.ecb_solve()
+print(C1_7.ecb_solve())
 
 ## Challenge 1-8:
 C1_8 = ListECB('Challenge_1-8.txt', 'hex')

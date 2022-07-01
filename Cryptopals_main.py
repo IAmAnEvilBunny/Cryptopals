@@ -17,7 +17,7 @@ from os import path
 # Byte operations
 def hex_byte_hamming(hex1, hex2):
     # Returns the Hamming distance of 2 bytes written in hex
-    assert len(hex1) == len(hex2)
+    assert len(hex1) == len(hex2) == 2
     counter = 0
     bin1 = binary(hex1, 16)
     bin2 = binary(hex2, 16)
@@ -27,32 +27,35 @@ def hex_byte_hamming(hex1, hex2):
     return counter
 
 def hex_hamming(hex1, hex2):
-    # Returns the hamming distance between two hex strings
+    # Returns the Hamming distance between two hex strings
+
+    assert len(hex1) == len(hex2)
+
+    # Convert strings to lists of bytes (strings of length two since hex)
     byte_list_1 = strtotwos(hex1)
     byte_list_2 = strtotwos(hex2)
 
-    byte_l = len(byte_list_1)
-    assert byte_l == len(byte_list_2)
-
+    # Sum the individual Hamming distances between the bytes
     ham = 0
-    for j in range(byte_l):
+    for j in range(len(byte_list_1)):
         ham += hex_byte_hamming(byte_list_1[j], byte_list_2[j])
 
     return ham
 
-def xorb(ba1, key):
-    # Returns ba1 XOR key, where ba1 and key are bytes
+def xorb(ba1: bytes, key: bytes):
+    # Returns ba1 XOR key, where arguments are b strings
     # https://nitratine.net/blog/post/xor-python-byte-strings/
-    key = resize_key2(key, len(ba1))
+    key = resize_key(key, len(ba1))
     return bytes([_a ^ _b for _a, _b in zip(ba1, key)])
 
 def binary(n, scale):
-    # Converts integer base scale to a byte
+    # Converts integer base scale to a single byte
     """
     Parameters
     ----------
     n : str
         Integer to be converted (must be between 0 and 255)
+        Given as a str in some base
     scale : int
         Base to which n is to be taken
 
@@ -64,7 +67,7 @@ def binary(n, scale):
     assert 0 <= int(n, scale) < 256  # So that integer may be written as a byte
     return bin(int(n, scale))[2:].zfill(8)
 
-def rand_bytes(n):
+def rand_bytes(n: int):
     # Returns a byte string composed of n random bytes
     rand = b''
     for i in range(n):
@@ -72,58 +75,24 @@ def rand_bytes(n):
         rand += rand_int.to_bytes(1, 'big')  # to_bytes: int -> byte
     return rand
 
-# Break static
-def block_size(fun_oracle, max_n=64):
-    for i in range(1, max_n + 1):
-        indent = b'A' * i
-        if fun_oracle(b'') == fun_oracle(indent)[i:]:
-            print(f'Block size is {i}')
-            return i
-
-def break_repeating(fun_oracle):
-    b_size = block_size(fun_oracle)
-    sol_len = len(fun_oracle(b''))
-    assert sol_len % b_size == 0
-    n_blocks = len(fun_oracle(b'')) // b_size
-    sol = b''
-
-    for k in range(n_blocks):
-        for i in range(b_size):
-            new_byte = br_solve_byte(fun_oracle, sol, b_size, i, k)
-            if not new_byte and k == n_blocks - 1:
-                print('stopped during final block')
-                break
-            sol += new_byte
-
-    print(sol)
-
-def br_solve_byte(fun_oracle, sol, b_size, i, k):
-    indent = k * b_size
-    dummy = b'A' * (b_size - 1 - i)
-    find = fun_oracle(dummy)[indent:b_size + indent]
-    for i in range(256):
-        byt = dummy + sol + i.to_bytes(1, 'big')
-        if fun_oracle(byt)[indent:b_size + indent] == find:
-            return i.to_bytes(1, 'big')
-
 # Text formatting
-def single_line_read2(txtfile):
+def single_line_read2(txtfile: str):
     # Reads file as a single line (stripping newlines)
     with open(txtfile) as file:
         sngl_line = ''.join([line.rstrip('\n') for line in file])
     return sngl_line
 
-def resize_key2(key, n):
+def resize_key(key, n):
     # Resize key to length n by repeating
     new_key = key * (n // len(key) + 1)
 
     return new_key[:n]  # Chop off excess
 
-def strtotwos(s, n=2):
+def strtotwos(s: str, n=2):
     # Splits string into list of strings of length 2
     return [s[i:i+n] for i in range(0, len(s), n)]
 
-def str_split(text, n):
+def str_split(text: str, n: int):
     # From a string, returns a list of strings consisting of every nth character,
     # starting from character 0, ..., n-1
     return [text[i::n] for i in range(n)]
@@ -141,16 +110,53 @@ def count_special_character(string):
 
     return special_char
 
-def simple_space_test(ans, freq=10):
+def simple_space_test(ans: str, freq=10):
     # Tests whether the number of spaces in the answer is plausible
     n = len(ans)//freq  # For every freq characters, require a space
     return ans.count(' ') >= n
 
-def simple_ch_test(ans, freq=7):
+def simple_ch_test(ans: str, freq=7):
     # Tests whether string has too many special characters
     n = len(ans)//freq + 1
     return count_special_character(ans) < n
 
+# Break static
+def block_size(fun_oracle: callable, max_n=64):
+    # Takes an oracle function
+    # Returns its block size
+    for i in range(1, max_n + 1):
+        indent = b'A' * i
+        if fun_oracle(b'') == fun_oracle(indent)[i:]:
+            print(f'Block size is {i}')
+            return i
+
+    print(f'No blocksize less than {max_n} found')
+
+def break_repeating(fun_oracle: callable):
+    b_size = block_size(fun_oracle)  # Find the blocksize
+    sol_len = len(fun_oracle(b''))  # Length of padded message we want to decipher
+    assert sol_len % b_size == 0  # Ensure message is correctly padded
+    n_blocks = len(fun_oracle(b'')) // b_size
+    sol = b''
+
+    for k in range(n_blocks):
+        for i in range(b_size):
+            new_byte = br_solve_byte(fun_oracle, sol, b_size, i, k)
+            if not new_byte and k == n_blocks - 1:
+                print('stopped during final block')
+                break
+            sol += new_byte
+
+    print(sol)
+
+def br_solve_byte(fun_oracle: callable, sol, b_size: int, i: int, k: int):
+    indent = k * b_size
+    dummy = b'A' * (b_size - 1 - i)
+    find = fun_oracle(dummy)[indent:b_size + indent]
+    for i in range(256):
+        byt = dummy + sol + i.to_bytes(1, 'big')
+        if fun_oracle(byt)[indent:b_size + indent] == find:
+            return i.to_bytes(1, 'big')
 
 # Classes
 class EasyByte:
@@ -226,6 +232,22 @@ class EasyByte:
         return hex_hamming(self.convert('hex'), b2.convert('hex'))
 
 class VCode:
+    """Class for the manipulation of messages encoded with a Vigenère cipher
+
+        Attributes
+        ----------
+        easybyte : EasyByte
+            See class EasyByte
+
+         Parameters
+        ----------
+        code : str or .txt file
+            Message. May be passed as a .txt file
+        base : str, optional
+            Base in which the code is encoded.
+            If not given, it is assumed the code is in byte format.
+            May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
+        """
     def __init__(self, code, base=None):
         self.easybyte = EasyByte(code, base)
         self.key = None
@@ -233,18 +255,23 @@ class VCode:
         self.key_poss = None
 
     def gen_keys(self, space_test=True, char_test=True, keys=None):
+        # Given a list of keys, assigns those that pass tests to self.keys
         self.keys = VCode.test_keys(self, keys, space_test, char_test)
+        return self
 
     def use_keys(self):
+        # Prints byte decrypted against all keys in self.keys as text
         for key in self.keys:
             print(self.easybyte.xor(key).convert('text'))
 
     def single_byte_keys(self, space_test=True, char_test=True):
+        # Assigns plausible single byte keys to self.keys
         keys = [int(i).to_bytes(1, byteorder='big') for i in range(256)]
         self.keys = self.test_keys(keys, space_test, char_test)
         return self
 
     def test_keys(self, keys, space_test=True, char_test=True):
+        # Given a list of keys, returns a list of those which pass all tests
         passed = []
         for key in keys:
             try:
@@ -261,6 +288,8 @@ class VCode:
         return passed
 
     def key_length(self, m=1, n=40):
+        # Prints a score for each key length
+        # Low score is more plausible
         for i in range(1, n):
             ham = 0
 
@@ -274,11 +303,14 @@ class VCode:
 
             print(str(i) + ' has score ' + str(ham / i / m))
 
-    def split(self, n):
-        return [VCode(byte_i) for byte_i in str_split(self.easybyte.b, n)]
+    def split(self, key_l: int):
+        # Divides the message into strips according to the key length,
+        # so as to obtain key_l single byte encoded strips
+        return [VCode(byte_i) for byte_i in str_split(self.easybyte.b, key_l)]
 
     def find_v_key(self, key_l):
-        # Given a key length, returns plausible Vigenère keys of that length
+        # Given a key length, assigns plausible Vigenère keys of that length
+        # to self.key_poss
         print(f'Searching for repeating key of length {key_l}')
         strips = self.split(key_l)
         keys_by_strip = []
@@ -290,26 +322,32 @@ class VCode:
         print(f"Found {possibilities} plausible key(s)")
 
         self.key_poss = keys_by_strip
+        return self
 
     def keys_from_poss(self):
+        # From self.key_poss, which contains possibilities for each byte of the key,
+        # assigns possible keys to self.keys, or if only 1 possible key, assigns to self.key
         keys = [sing_byte for sing_byte in self.key_poss[0]]
         for i in range(1, len(self.key_poss)):
             keys = [old_key + new_byte for old_key in keys for new_byte in self.key_poss[i]]
 
         if len(keys) > 1:
+            print('Several keys.')
             self.keys = keys
 
         if len(keys) == 1:
+            print('Only 1 key !')
             self.key = keys[0]
 
         else:
-            raise Exception("This shouldn't happen")
+            raise Exception("Error: no keys ?")
 
     def solve(self):
-        # Returns code decyphered according to key
+        # Prints code decyphered according to self.key
         print(self.easybyte.xor(self.key).convert('text'))
 
     def freq(self):
+        # Returns the frequency of each byte in the encoded message
         freqs = [0]*256
         for byt in self.easybyte.b:
             # Each byt is an integer representing ord(byte)
@@ -318,20 +356,45 @@ class VCode:
         return freqs
 
     def simple_freq_test(self, lb_max_freq=10):
+        # Simple frequency test to detect Vigenère ciphers
+        # Expects most common byte to appear once in every lb_max_freq bytes
+        # You would expect a fair amount of spaces, for example
         freqs = self.freq()
 
         return max(freqs) > len(self.easybyte.b) / lb_max_freq
 
 class ListVCode:
+    """Class to deal with multiple messages, passed as lines in a .txt file
+
+            Attributes
+            ----------
+            codes : list of VCode
+                See class VCode
+
+            Parameters
+            ----------
+            code_file : .txt file
+                Message, passed as a .txt file
+            base : str, optional
+                Base in which the code is encoded.
+                If not given, it is assumed the code is in byte format.
+                May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
+            """
     def __init__(self, code_file, base=None):
         with open(code_file) as file:
             self.codes = [VCode(line, base) for line in file]
 
     def detect_single_byte(self):
+        # Prints the line number of codes possibly encrypted with a single byte repeating key
+        # Decrypts those lines
         for i in range(len(self.codes)):
             code = self.codes[i]
+
+            # Run code through simple singly byte key detection
             if code.simple_freq_test():
                 print(i)
+
+                # If passes, then decrypt
                 code = code.single_byte_keys()
                 code.use_keys()
 

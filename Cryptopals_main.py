@@ -97,6 +97,13 @@ def str_split(text: str, n: int):
     # starting from character 0, ..., n-1
     return [text[i::n] for i in range(n)]
 
+def string_to_dict(s, sep1='=', sep2='&'):
+    # Takes string of form 'key1=value1&key2=value2&...' and returns dict
+    # of form {'key1': 'value1', 'key2': 'value2', ...}
+    lst = [x.split(sep1) for x in s.split(sep2)]
+
+    return {two_lst[0]: two_lst[1] for two_lst in lst}
+
 # Tests
 def count_special_character(string):
     # Returns the number of special characters in a string
@@ -526,7 +533,7 @@ class ListECB:
         Base in which the code is encoded.
         If not given, it is assumed the code is in byte format.
         May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
-        """
+    """
     def __init__(self, code_file, base=None):
         with open(code_file) as file:
             self.codes = [AESCode(line, base) for line in file]
@@ -537,3 +544,26 @@ class ListECB:
             repeat_k = self.codes[k].repeat()
             if repeat_k != 0:
                 print(f'Code {k} has {repeat_k} repeats')
+
+class Profile:
+    """Class for profile creation
+
+    Attributes
+    ----------
+    p : str
+        Profile encoded as single string
+        Example: email=foo@bar&uid=10&role='user'
+
+    Parameters
+    ----------
+    email : str
+        Profile's email
+    role : str
+        Profile's role, may be user or admin.
+    """
+    def __init__(self, email: str, role='user'):
+        assert role == 'user' or role == 'admin'
+        email = email.replace('&', '').replace('=', '')
+        s = f'email={email}&uid={str(randint(0, 9999))}&role={role}'
+
+        self.p = s

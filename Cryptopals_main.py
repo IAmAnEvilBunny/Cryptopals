@@ -127,44 +127,6 @@ def simple_ch_test(ans: str, freq=7):
     n = len(ans)//freq + 1
     return count_special_character(ans) < n
 
-# Break static
-def block_size(fun_oracle: callable, max_n=64):
-    # Takes an oracle function
-    # Returns its block size
-    for i in range(1, max_n + 1):
-        indent = b'A' * i
-        if fun_oracle(b'') == fun_oracle(indent)[i:]:
-            print(f'Block size is {i}')
-            return i
-
-    print(f'No blocksize less than {max_n} found')
-
-def break_repeating(fun_oracle: callable):
-    b_size = block_size(fun_oracle)  # Find the blocksize
-    sol_len = len(fun_oracle(b''))  # Length of padded message we want to decipher
-    assert sol_len % b_size == 0  # Ensure message is correctly padded
-    n_blocks = len(fun_oracle(b'')) // b_size
-    sol = b''
-
-    for k in range(n_blocks):
-        for i in range(b_size):
-            new_byte = br_solve_byte(fun_oracle, sol, b_size, i, k)
-            if not new_byte and k == n_blocks - 1:
-                print('stopped during final block')
-                break
-            sol += new_byte
-
-    print(sol)
-
-def br_solve_byte(fun_oracle: callable, sol, b_size: int, i: int, k: int):
-    indent = k * b_size
-    dummy = b'A' * (b_size - 1 - i)
-    find = fun_oracle(dummy)[indent:b_size + indent]
-    for i in range(256):
-        byt = dummy + sol + i.to_bytes(1, 'big')
-        if fun_oracle(byt)[indent:b_size + indent] == find:
-            return i.to_bytes(1, 'big')
-
 # Classes
 class EasyByte:
     """Class for the manipulation of byte strings
@@ -421,6 +383,10 @@ class AESCode:
     iv : bytes
         Initialisation vector, used in CBC mode
 
+    rand : bytes
+        A random number (0-15) of random bytes. Required for the oracle function
+        for challenge 2-6.
+
     Parameters
     ----------
     code : str or .txt file
@@ -431,11 +397,17 @@ class AESCode:
         Base in which the code is encoded.
         If not given, it is assumed the code is in byte format.
         May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
+    rand : boolean, optional
+        If true, object will have property self.rand
         """
-    def __init__(self, code, base=None):
+    def __init__(self, code, base=None, rand=False):
         self.easybyte = EasyByte(code, base)
         self.cipher = None
         self.iv = None
+        if rand:
+            self.prep = rand_bytes(randint(0, 15))
+        else:
+            self.prep = b''
 
     def gen_cipher(self, key):
         # Generates cipher according to key
@@ -510,12 +482,130 @@ class AESCode:
         print(sol.decode())
         return sol.decode()
 
-    def oracle(self, bstring: bytes):
+    def oracle_fun(self, bstring: bytes):
         # Oracle function, see Cryptopals set 2 challenge 11
+
+        # If prepend_rand, prepends self.rand, a random number of random bytes
+        # determined upon object creation.
+        bstring = self.prep + bstring
+
         to_be_encrypted = pad(bstring + self.ecb_solve().encode(), AES.block_size)
         encrypted = self.cipher.encrypt(to_be_encrypted)
         bencrypted = EasyByte(encrypted)
         return bencrypted.b
+
+class ECBOracle:
+    def __init__(self, fun: callable):
+        self.fun = fun
+        self.b_size, self.l_full_prep_blocks = self.block_size()
+        self.prep_fill = self.fill_prepended()
+
+    def max_unchanged(self):
+        # Returns the number of leading characters unaffected when passing any byte to the oracle
+        # Warning: 1/256 chance of error
+        b1 = self.fun(b'A')
+        b2 = self.fun(b'B')
+
+        for i in reversed(range(len(b1))):
+            if b1[i] != b2[i]:
+                return i + 1
+
+    def block_size(self, max_n=64):
+        # Takes an oracle function
+        # Returns its block size, and the length of prepended text occupying full blocks
+        b_size = 0
+        max_unchanged = self.max_unchanged()
+
+        # Obtain a function that "forgets" the initial bytes that don't change
+        snipped_fun = self.clean_oracle(l_snip=max_unchanged)
+
+        # Pass bytes of growing length to the "cleaned up" oracle until we observe repeats
+        for i in range(1, max_n + 1):
+            indent = b'A' * i
+            if snipped_fun(b'') == snipped_fun(indent)[i:]:
+                print(f'Block size is {i}')
+                b_size = i
+                break
+
+        # Check we found a solution
+        if b_size == 0:
+            raise Exception(f'No blocksize less than {max_n} found')
+
+        # The leading unchanged bytes should have length a multiple of the block size
+        assert max_unchanged % b_size == 0
+
+        # The number of leading unchanging blocks is the largest multiple of
+        # the block size contained in the number of unchanging bytes
+        l_full_prep_blocks = (max_unchanged//b_size - 1) * b_size
+
+        return b_size, l_full_prep_blocks
+
+    def fill_prepended(self):
+        # returns a byte string to fill any unfull blocks containing prepended random text
+        l_fill_prepended = (self.b_size - self.l_prepended()) % 16
+        return b'' + l_fill_prepended * b'A'
+
+    def l_prepended(self):
+        # Returns the length of prepended text (not counting that contained in full blocks)
+
+        # Use oracle function without full blocks
+        snipped_fun = self.clean_oracle(l_snip=self.l_full_prep_blocks)
+
+        # Find out the length a byte passed to the oracle needs to be to start affecting the second block
+        # instead of the first.
+        # NOTE: Should probably flip this around to consider the case 0 first
+        for i in range(1, self.b_size):
+            if snipped_fun(b'A' * (i + 1))[0:self.b_size] == snipped_fun(b'A' * i + b'B')[0:self.b_size]:
+                return (-i) % self.b_size
+
+        return 0
+
+    def clean_oracle(self, l_snip=0, prep=b''):
+        # Returns a modified oracle function for lighter code
+        def clean(bstring: bytes):
+            return self.fun(prep + bstring)[l_snip:]
+
+        return clean
+
+    def solve(self):
+        # With access to an oracle function,
+        # prints the encrypted message, discarding any prepended random blocks
+
+        # Obtain total length of prepended text
+        to_chop = self.l_full_prep_blocks
+        if len(self.prep_fill):
+            to_chop += self.b_size
+
+        # Obtain an oracle function without prepended text
+        # This is done by passing a byte filling any block partially filled with prepended text.
+        # We can then chop off unwanted text in units of block size
+        fun_oracle_clean = self.clean_oracle(to_chop, self.prep_fill)
+
+        sol_len = len(fun_oracle_clean(b''))  # Length of padded message we want to decipher
+        assert sol_len % self.b_size == 0  # Ensure message is correctly padded
+        n_blocks = len(fun_oracle_clean(b'')) // self.b_size  # Number of blocks
+        sol = b''
+
+        # TODO: Separate out a function of the below
+        for k in range(n_blocks):
+            for i in range(self.b_size):
+                new_byte = br_solve_byte(fun_oracle_clean, sol, self.b_size, i, k)
+                if not new_byte:
+                    print('stopped')
+                    break
+                sol += new_byte
+
+        print(sol)
+
+# Break static
+def br_solve_byte(fun_oracle: callable, sol, b_size: int, i: int, k: int):
+    indent = k * b_size
+    dummy = b'A' * (b_size - 1 - i)
+    find = fun_oracle(dummy)[indent:b_size + indent]
+    for i in range(256):
+        byt = dummy + sol + i.to_bytes(1, 'big')
+        if fun_oracle(byt)[indent:b_size + indent] == find:
+            return i.to_bytes(1, 'big')
 
 class ListECB:
     """Class to deal with multiple messages, passed as lines in a .txt file
@@ -533,7 +623,7 @@ class ListECB:
         Base in which the code is encoded.
         If not given, it is assumed the code is in byte format.
         May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
-    """
+        """
     def __init__(self, code_file, base=None):
         with open(code_file) as file:
             self.codes = [AESCode(line, base) for line in file]
@@ -546,21 +636,6 @@ class ListECB:
                 print(f'Code {k} has {repeat_k} repeats')
 
 class Profile:
-    """Class for profile creation
-
-    Attributes
-    ----------
-    p : str
-        Profile encoded as single string
-        Example: email=foo@bar&uid=10&role='user'
-
-    Parameters
-    ----------
-    email : str
-        Profile's email
-    role : str
-        Profile's role, may be user or admin.
-    """
     def __init__(self, email: str, role='user'):
         assert role == 'user' or role == 'admin'
         email = email.replace('&', '').replace('=', '')

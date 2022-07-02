@@ -75,6 +75,32 @@ def rand_bytes(n: int):
         rand += rand_int.to_bytes(1, 'big')  # to_bytes: int -> byte
     return rand
 
+def b_remove(b: bytes, rem: bytes) -> bytes:
+    # Removes all characters in the bstring rem from the bstring s, returns s
+    for i in range(len(rem)):
+        c = rem[i:i+1]
+        b = b.replace(c, b'')
+
+    return b
+
+def gen_sandwich(prep=b'', app=b'', rem=b'') -> callable:
+    # Generates a function that takes a bstring b, prepends prep and appends app to b,
+    # removes characters in rem from the result, and returns b
+
+    def sandwich(b: bytes) -> bytes:
+        # Removes characters in rem from prep and app, prepends prep and appends app to s, and returns s
+
+        return prep + b_remove(b, rem) + app
+
+    return sandwich
+
+def user_profile_for(email: bytes):
+    # Used in challenge 2-13
+    # Encodes a user profile as a byte
+    email = b_remove(email, b'&=')
+    return 'email='.encode() + email + f'&uid='.encode() + \
+           str(randint(0, 9999)).zfill(4).encode() + '&role=user'.encode()
+
 # Text formatting
 def single_line_read2(txtfile: str):
     # Reads file as a single line (stripping newlines)
@@ -399,8 +425,8 @@ class AESCode:
         May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
     rand : boolean, optional
         If true, object will have property self.rand
-        """
-    def __init__(self, code, base=None, rand=False):
+    """
+    def __init__(self, code=b'', base=None, rand=False):
         self.easybyte = EasyByte(code, base)
         self.cipher = None
         self.iv = None
@@ -415,6 +441,9 @@ class AESCode:
         if key == 'random':
             key = rand_bytes(16)
         self.cipher = AES.new(key, AES.MODE_ECB)
+
+    def random_iv(self):
+        self.iv = rand_bytes(16)
 
     def ecb_solve(self, letsunpad=True):
         # Returns message decrypted according to self.cipher
@@ -482,130 +511,13 @@ class AESCode:
         print(sol.decode())
         return sol.decode()
 
-    def oracle_fun(self, bstring: bytes):
-        # Oracle function, see Cryptopals set 2 challenge 11
+    def gen_ecb_oracle(self, bstr_fun: callable):
 
-        # If prepend_rand, prepends self.rand, a random number of random bytes
-        # determined upon object creation.
-        bstring = self.prep + bstring
+        def ecb_oracle(bstring: bytes):
+            to_be_encrypted = pad(bstr_fun(bstring), AES.block_size)
+            return self.cipher.encrypt(to_be_encrypted)
 
-        to_be_encrypted = pad(bstring + self.ecb_solve().encode(), AES.block_size)
-        encrypted = self.cipher.encrypt(to_be_encrypted)
-        bencrypted = EasyByte(encrypted)
-        return bencrypted.b
-
-class ECBOracle:
-    def __init__(self, fun: callable):
-        self.fun = fun
-        self.b_size, self.l_full_prep_blocks = self.block_size()
-        self.prep_fill = self.fill_prepended()
-
-    def max_unchanged(self):
-        # Returns the number of leading characters unaffected when passing any byte to the oracle
-        # Warning: 1/256 chance of error
-        b1 = self.fun(b'A')
-        b2 = self.fun(b'B')
-
-        for i in reversed(range(len(b1))):
-            if b1[i] != b2[i]:
-                return i + 1
-
-    def block_size(self, max_n=64):
-        # Takes an oracle function
-        # Returns its block size, and the length of prepended text occupying full blocks
-        b_size = 0
-        max_unchanged = self.max_unchanged()
-
-        # Obtain a function that "forgets" the initial bytes that don't change
-        snipped_fun = self.clean_oracle(l_snip=max_unchanged)
-
-        # Pass bytes of growing length to the "cleaned up" oracle until we observe repeats
-        for i in range(1, max_n + 1):
-            indent = b'A' * i
-            if snipped_fun(b'') == snipped_fun(indent)[i:]:
-                print(f'Block size is {i}')
-                b_size = i
-                break
-
-        # Check we found a solution
-        if b_size == 0:
-            raise Exception(f'No blocksize less than {max_n} found')
-
-        # The leading unchanged bytes should have length a multiple of the block size
-        assert max_unchanged % b_size == 0
-
-        # The number of leading unchanging blocks is the largest multiple of
-        # the block size contained in the number of unchanging bytes
-        l_full_prep_blocks = (max_unchanged//b_size - 1) * b_size
-
-        return b_size, l_full_prep_blocks
-
-    def fill_prepended(self):
-        # returns a byte string to fill any unfull blocks containing prepended random text
-        l_fill_prepended = (self.b_size - self.l_prepended()) % 16
-        return b'' + l_fill_prepended * b'A'
-
-    def l_prepended(self):
-        # Returns the length of prepended text (not counting that contained in full blocks)
-
-        # Use oracle function without full blocks
-        snipped_fun = self.clean_oracle(l_snip=self.l_full_prep_blocks)
-
-        # Find out the length a byte passed to the oracle needs to be to start affecting the second block
-        # instead of the first.
-        # NOTE: Should probably flip this around to consider the case 0 first
-        for i in range(1, self.b_size):
-            if snipped_fun(b'A' * (i + 1))[0:self.b_size] == snipped_fun(b'A' * i + b'B')[0:self.b_size]:
-                return (-i) % self.b_size
-
-        return 0
-
-    def clean_oracle(self, l_snip=0, prep=b''):
-        # Returns a modified oracle function for lighter code
-        def clean(bstring: bytes):
-            return self.fun(prep + bstring)[l_snip:]
-
-        return clean
-
-    def solve(self):
-        # With access to an oracle function,
-        # prints the encrypted message, discarding any prepended random blocks
-
-        # Obtain total length of prepended text
-        to_chop = self.l_full_prep_blocks
-        if len(self.prep_fill):
-            to_chop += self.b_size
-
-        # Obtain an oracle function without prepended text
-        # This is done by passing a byte filling any block partially filled with prepended text.
-        # We can then chop off unwanted text in units of block size
-        fun_oracle_clean = self.clean_oracle(to_chop, self.prep_fill)
-
-        sol_len = len(fun_oracle_clean(b''))  # Length of padded message we want to decipher
-        assert sol_len % self.b_size == 0  # Ensure message is correctly padded
-        n_blocks = len(fun_oracle_clean(b'')) // self.b_size  # Number of blocks
-        sol = b''
-
-        # TODO: Separate out a function of the below
-        for k in range(n_blocks):
-            for i in range(self.b_size):
-                new_byte = br_solve_byte(fun_oracle_clean, sol, self.b_size, i, k)
-                if not new_byte:
-                    print('stopped')
-                    break
-                sol += new_byte
-
-        print(sol)
-
-# Break static
-def br_solve_byte(fun_oracle: callable, sol, b_size: int, i: int, k: int):
-    indent = k * b_size
-    dummy = b'A' * (b_size - 1 - i)
-    find = fun_oracle(dummy)[indent:b_size + indent]
-    for i in range(256):
-        byt = dummy + sol + i.to_bytes(1, 'big')
-        if fun_oracle(byt)[indent:b_size + indent] == find:
-            return i.to_bytes(1, 'big')
+        return ecb_oracle
 
 class ListECB:
     """Class to deal with multiple messages, passed as lines in a .txt file
@@ -651,9 +563,169 @@ class Profile:
     role : str
         Profile's role, may be user or admin.
     """
-    def __init__(self, email: str, role='user'):
+    def __init__(self, email: bytes, role='user'):
         assert role == 'user' or role == 'admin'
-        email = email.replace('&', '').replace('=', '')
+        email = b_remove(email, b'&=')
         s = f'email={email}&uid={str(randint(0, 9999))}&role={role}'
 
         self.p = s
+
+class DetOracle:
+    """Class for oracle functions of deterministic encryption
+
+        Attributes
+        ----------
+        fun : callable
+            Oracle function
+            Takes a string, modifies it according to a predetermined function,
+            returns result encrypted according to a deterministic cypher
+
+        Parameters
+        ----------
+        fun : callable
+            Oracle function to be worked on
+    """
+    def __init__(self, fun: callable):
+        self.fun = fun
+        self.b_size = None
+        self.l_full_prep_blocks = None
+        self.prep_fill = None
+        self.og_fun = None
+        self.clean_fun = None
+
+    def max_unchanged(self):
+        # Returns the number of leading characters unaffected when passing any byte to the oracle
+        # Warning: 1/256 chance of error
+        b1 = self.fun(b'A')
+        b2 = self.fun(b'B')
+
+        for i in reversed(range(len(b1))):
+            if b1[i] != b2[i]:
+                return i + 1
+
+    def block_size(self, max_n=64):
+        # Takes an oracle function
+        # Returns its block size, and the length of prepended text occupying full blocks
+        b_size = 0
+        max_unchanged = self.max_unchanged()
+
+        # Obtain a function that "forgets" the initial bytes that don't change
+        snipped_fun = self.mod_oracle(l_snip=max_unchanged)
+
+        # Pass bytes of growing length to the "cleaned up" oracle until we observe repeats
+        for i in range(1, max_n + 1):
+            indent = b'A' * i
+            if snipped_fun(b'') == snipped_fun(indent)[i:]:
+                b_size = i
+                break
+
+        # Check we found a solution
+        if b_size == 0:
+            raise Exception(f'No blocksize less than {max_n} found')
+
+        # The leading unchanged bytes should have length a multiple of the block size
+        assert max_unchanged % b_size == 0
+
+        # The number of leading unchanging blocks is the largest multiple of
+        # the block size contained in the number of unchanging bytes
+        l_full_prep_blocks = (max_unchanged//b_size - 1) * b_size
+
+        return b_size, l_full_prep_blocks
+
+    def fill_prepended(self):
+        # returns a byte string to fill any unfull blocks containing prepended random text
+        l_fill_prepended = (self.b_size - self.l_prepended()) % 16
+        return b'' + l_fill_prepended * b'A'
+
+    def l_prepended(self):
+        # Returns the length of prepended text (not counting that contained in full blocks)
+
+        # Use oracle function without full blocks
+        snipped_fun = self.mod_oracle(l_snip=self.l_full_prep_blocks)
+
+        # Find out the length a byte passed to the oracle needs to be to start affecting the second block
+        # instead of the first.
+        # NOTE: Should probably flip this around to consider the case 0 first
+        for i in range(1, self.b_size):
+            if snipped_fun(b'A' * (i + 1))[0:self.b_size] == snipped_fun(b'A' * i + b'B')[0:self.b_size]:
+                return (-i) % self.b_size
+
+        return 0
+
+    def mod_oracle(self, l_snip=0, prep=b''):
+        # Returns a modified oracle function for lighter code
+        def modified(bstring: bytes):
+            return self.fun(prep + bstring)[l_snip:]
+
+        return modified
+
+    def clean_oracle(self):
+        # 'Cleans up' oracle function to obtain a simpler case to crack a solution for
+
+        # Obtain total length of prepended text
+        to_chop = self.l_full_prep_blocks
+        if len(self.prep_fill):
+            to_chop += self.b_size
+
+        # Obtain an oracle function without prepended text
+        # This is done by passing a byte filling any block partially filled with prepended text.
+        # We can then chop off unwanted text in units of block size
+        return self.mod_oracle(to_chop, self.prep_fill)
+
+    def solve(self):
+        # With access to an oracle function,
+        # prints the encrypted message, discarding any prepended random blocks
+
+        # Prepare
+        self.b_size, self.l_full_prep_blocks = self.block_size()
+        self.prep_fill = self.fill_prepended()
+        self.og_fun = self.fun
+        self.clean_fun = self.clean_oracle()
+
+        print(f'Block size is {self.b_size}')
+
+        self.solve_clean()
+
+    # TODO: Break down
+    # Would be best to modify the oracle each time
+    def solve_clean(self):
+        # With access to an oracle function, prints the encrypted message
+        oracle = self.clean_fun  # Operate on simple oracle without prepended random text
+        n_blocks = len(oracle(b'')) // self.b_size  # Number of blocks
+        sol = b''
+
+        # Iterate over blocks
+        for k in range(n_blocks):
+            indent = k * self.b_size  # Indent to work on different blocks
+
+            # Iterate over bytes in block
+            for i in range(self.b_size):
+                dummy = b'A' * (self.b_size - 1 - i)
+
+                find = oracle(dummy)[indent:self.b_size + indent]
+                new_byte = None
+                for j in range(256):
+                    byt = dummy + sol + j.to_bytes(1, 'big')
+                    if oracle(byt)[indent:self.b_size + indent] == find:
+                        new_byte = j.to_bytes(1, 'big')
+                        break
+
+                # When we each the end of the message, the oracle will start padding
+                if new_byte == b'\x01' and k == n_blocks - 1:
+                    print('stopped')
+                    break
+
+                # Add new byte to solution
+                sol += new_byte
+
+        print(sol)
+
+    def challenge2_5(self):
+        # Function specific to challenge 2.5
+        email1 = b'YELLOWBIRD' + pad(b'admin', AES.block_size)
+        admin_block = self.fun(email1)[16:32]
+
+        email2 = b'YELLOWBIRDS'
+        admin = self.fun(email2)[:32] + admin_block
+
+        return admin

@@ -22,3 +22,12 @@ def challenge_3_1():
 
 
 challenge_3_1()
+
+## Challenge 3-2
+def challenge_3_2():
+    c3_2_ciphertext = 'L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ=='
+    c3_2 = AESCode(c3_2_ciphertext, 'b64', key=b'YELLOW SUBMARINE', nonce=empty_bytes(8))
+    print(c3_2.ctr())
+
+    
+challenge_3_2()

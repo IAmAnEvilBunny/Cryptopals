@@ -1,4 +1,4 @@
-from Cryptopals_main import *
+from Copy_Cryptopals_v2 import *
 
 ## Challenge 1-1
 # Declare byte
@@ -82,15 +82,14 @@ C1_6.key_length(10)
 ## Challenge 1-6, part 3: find key
 C1_6_key_l = 29
 
-C_1_6_key = C1_6.find_v_key(29)
+C_1_6 = C1_6.find_v_key(29)
 C1_6.keys_from_poss()
 
 ## Challenge 1-6: answer
 C1_6.solve()
 
 ## Challenge 1-7:
-C1_7 = AESCode('Challenge_1-7.txt', 'b64')
-C1_7.gen_cipher(b'YELLOW SUBMARINE')
+C1_7 = AESCode('Challenge_1-7.txt', 'b64', b'YELLOW SUBMARINE')
 print(C1_7.ecb_solve())
 
 ## Challenge 1-8:

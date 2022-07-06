@@ -8,9 +8,9 @@ C2_10.cbc_solve()
 ## Challenge 2-4
 # Record exercises plaintext
 C2_12_plaintext = EasyByte('Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg'
-                'aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq'
-                'dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg'
-                'YnkK', 'b64')
+                           'aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq'
+                           'dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg'
+                           'YnkK', 'b64')
 
 # Generate random cipher
 C2_12 = AESCode(key='random')
@@ -53,3 +53,27 @@ C2_6b_oracle.solve()
 
 ## Challenge 2-7
 # Already implemented
+
+## Challenge 2-8
+def challenge_2_8():
+    # String function for the challenge
+    c2_8_str_fun = gen_sandwich(b"comment1=cooking%20MCs;userdata=",
+                                b";comment2=%20like%20a%20pound%20of%20bacon",
+                                b";=")
+
+    # Create random oracle
+    c2_8 = AESCode(key='random', iv='random')
+    c2_8_oracle = c2_8.gen_cbc_oracle(c2_8_str_fun)
+
+    # Pass an empty block (that we don't mind scrambling) followed by block we wish to modify
+    encoded = c2_8_oracle(b'\x00' * 16 + b':admin<true:' + b'\x00' * 4)
+    # Flip bits in the empty blocks, this scrambles the block and flips bits in the next when decoding
+    flipped = bit_flip(encoded, [32, 38, 43])
+
+    # Pass onto random cipher and solve
+    c2_8.easybyte.b = flipped
+    assert b';admin=true;' in c2_8.cbc_solve()
+    print('Challenge 2-8 passed !')
+
+
+challenge_2_8()

@@ -121,6 +121,10 @@ def create_rand_byte_fun(txtdoc, base=None):
 
     return rand_byte
 
+def empty_bytes(n: int):
+    # Returns a byte string of length n, all bytes = \x00
+    return b'\x00' * n
+
 # Text formatting
 def single_line_read2(txtfile: str):
     # Reads file as a single line (stripping newlines)
@@ -446,14 +450,17 @@ class AESCode:
         If not given, it is assumed the code is in byte format.
         May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
     """
-    def __init__(self, code=b'', base=None, key=None, iv=None):
+    def __init__(self, code=b'', base=None, key=None, iv=None, nonce=None):
         self.easybyte = EasyByte(code, base)
         self.cipher = None
         self.iv = None
+        self.nonce = None
         if key:
             self.cipher = self.gen_cipher(key)
         if iv:
             self.iv = self.gen_iv(iv)
+        if nonce:
+            self.nonce = self.gen_nonce(nonce)
 
     def gen_cipher(self, key):
         # Generates cipher according to key
@@ -474,6 +481,16 @@ class AESCode:
         else:
             raise Exception('TypeError')
         return iv
+
+    def gen_nonce(self, nonce):
+        # Generates nonce
+        # If an integer is passed, nonce will be an empty byte of that length (composed of b'\x00')
+        if type(nonce) == int:
+            return empty_bytes(nonce)
+        elif type(nonce) == bytes:
+            return nonce
+        else:
+            raise Exception('TypeError')
 
     def ecb_solve(self, letsunpad=True):
         # Returns message decrypted according to self.cipher
@@ -537,6 +554,37 @@ class AESCode:
         sol = unpad(sol, AES.block_size)
         print(sol)
         return sol
+
+    def ctr(self):
+        # CTR encrypts/decrypts.
+        # Written as if for encryption, but is the same for decryption.
+        extra_byte_n = len(self.easybyte.b) % 16  # Number of bytes short of full block
+
+        # If required, pad. Padding bytes will be removed manually at the end.
+        if extra_byte_n:
+            self.easybyte.b = pad(self.easybyte.b, AES.block_size)
+
+        # start counter at 0
+        counter = 0
+        encrypted = b''
+
+        blocks = self.block_list()
+        for block in blocks:
+            # For some reason, counting in the challenge seems to be done left to right,
+            # so 1 is b'\x01\x00\x00...'
+            # nonce + counter should have length blocksize
+            bytes_counter = bytearray(counter.to_bytes(16 - len(self.nonce), byteorder='big'))
+            bytes_counter.reverse()
+
+            # Encrypt (nonce|counter) according to AES cipher
+            to_encrypt = self.nonce + bytes_counter
+            xor_bytes = self.cipher.encrypt(to_encrypt)
+
+            # XOR result with plaintext and append to ciphertext
+            encrypted += block.xor(xor_bytes).b
+            counter += 1
+
+        return encrypted[:-extra_byte_n]  # Remove padding bytes before returning
 
     def gen_ecb_oracle(self, bstr_fun: callable):
         # Generates an oracle function according to bstr_fun, see below

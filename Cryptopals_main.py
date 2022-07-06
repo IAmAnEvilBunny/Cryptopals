@@ -48,6 +48,19 @@ def xorb(ba1: bytes, key: bytes):
     key = resize_key(key, len(ba1))
     return bytes([_a ^ _b for _a, _b in zip(ba1, key)])
 
+def bit_flip(bstring, byte_pos_list):
+    # Given a bytes string, XORs nth byte with b'\x01' (00000001)
+
+    flip_str = b''  # This will be XORed with bstring
+    # Create a byte string with \x01 in the positions given by byte_pos_list padded with zeros
+    for i in range(len(bstring)):
+        if i in byte_pos_list:
+            flip_str += b'\x01'
+        else:
+            flip_str += b'\x00'
+
+    return EasyByte(bstring).xor(flip_str).b
+
 def binary(n, scale):
     # Converts integer base scale to a single byte
     """
@@ -508,8 +521,8 @@ class AESCode:
         pos1unxored = xorb(pos1deciphered, self.iv)
         sol = pos1unxored + sol
         sol = unpad(sol, AES.block_size)
-        print(sol.decode())
-        return sol.decode()
+        print(sol)
+        return sol
 
     def gen_ecb_oracle(self, bstr_fun: callable):
         # Generates an oracle function according to bstr_fun, see below
@@ -527,7 +540,7 @@ class AESCode:
         def cbc_oracle(bstring: bytes):
             # First manipulates bstring according to bstr_fun
             # Then cbc encrypts according to cypher
-            self.easybyte = pad(bstr_fun(bstring), AES.block_size)
+            self.easybyte.b = bstr_fun(bstring)
             return self.cbc_encrypt().easybyte.b
 
         return cbc_oracle

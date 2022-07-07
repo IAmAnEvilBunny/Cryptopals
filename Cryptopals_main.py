@@ -126,7 +126,7 @@ def empty_bytes(n: int):
     return b'\x00' * n
 
 # Text formatting
-def single_line_read2(txtfile: str):
+def single_line_read(txtfile: str):
     # Reads file as a single line (stripping newlines)
     with open(txtfile) as file:
         sngl_line = ''.join([line.rstrip('\n') for line in file])
@@ -209,7 +209,7 @@ class EasyByte:
         # Translate string in multiple formats to byte string
         # If a file is given, the file is first converted to a single line string
         if path.isfile(code):
-            return EasyByte.make_byte(self, single_line_read2(code), base)
+            return EasyByte.make_byte(self, single_line_read(code), base)
 
         elif not base:
             return code
@@ -345,10 +345,15 @@ class VCode:
         for strip in strips:
             keys_by_strip.append(strip.single_byte_keys(True, True).keys)
 
+        self.key_poss = keys_by_strip  # Record possibilities
+
+        # Analysis of possibilities
         possibilities = prod([len(keys) for keys in keys_by_strip])
         print(f"Found {possibilities} plausible key(s)")
 
-        self.key_poss = keys_by_strip
+        n_surefire = sum([1 if len(lst) == 1 else 0 for lst in keys_by_strip])
+        print(f'{n_surefire} out of {key_l} bytes returned a single possibility')
+
         return self
 
     def keys_from_poss(self):
@@ -424,6 +429,16 @@ class ListVCode:
                 # If passes, then decrypt
                 code = code.single_byte_keys()
                 code.use_keys()
+
+    def truncate_and_join(self):
+        # Truncates each byte string to the length of the shortest one
+        # Joins byte strings up to single line and returns as VCode
+        full_text = [code.easybyte.b for code in self.codes]  # List of lines as bytes
+        min_len = min([len(line) for line in full_text])  # Find length of shortest line
+        sngl_line = b''.join([line[:min_len] for line in full_text])  # Truncate and join
+        print(f'The shortest line has length {min_len}.')  # Print length of shortest line
+
+        return VCode(sngl_line)
 
 class AESCode:
     """Class for the manipulation of messages encoded with AES

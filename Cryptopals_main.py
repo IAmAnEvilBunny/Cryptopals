@@ -125,6 +125,11 @@ def empty_bytes(n: int):
     # Returns a byte string of length n, all bytes = \x00
     return b'\x00' * n
 
+def bit_not(n, numbits=8):
+    # Returns not n, where n is an numbits bits integer
+    # https://stackoverflow.com/questions/31151107/how-do-i-do-a-bitwise-not-operation-in-python
+    return (1 << numbits) - 1 - n
+
 # Text formatting
 def single_line_read(txtfile: str):
     # Reads file as a single line (stripping newlines)
@@ -840,3 +845,52 @@ class DetOracle:
         admin = self.fun(email2)[:32] + admin_block
 
         return admin
+
+class MT19937:
+    def __init__(self, seed):
+        self.index = 0
+        self.mt = [0]
+        self.rand_num_gen = self.mt19937(seed)
+        self.seed = seed
+
+    def mt19937(self, seed, w=32, n=624, m=397, r=31, a=int('9908b0df', 16), u=11, d=int('ffffffff', 16),
+                s=7, b=int('9d2c5680', 16), t=15, c=int('efc60000', 16), wiki_l=18, f=1812433253):
+        # https://en.wikipedia.org/wiki/Mersenne_Twister#k-distribution
+        lower_mask = (1 << r) - 1  # That is, the binary number of r 1's or 2**r - 1
+        upper_mask = bit_not(lower_mask, 32)
+        self.index = n
+
+        # Initialise the generator from a seed
+        def seed_mt():
+            self.mt = [0] * n
+            self.mt[0] = seed
+            for i in range(1, n):
+                self.mt[i] = (f * (self.mt[i - 1] ^ (self.mt[i - 1] >> (w - 2))) + i) % 2 ** w
+
+        seed_mt()
+
+        def extract_number():
+            if self.index == n:
+                twist()
+
+            y = self.mt[self.index]
+            y = y ^ ((y >> u) & d)
+            y = y ^ ((y << s) & b)
+            y = y ^ ((y << t) & c)
+            y = y ^ (y >> wiki_l)
+
+            self.index += 1
+
+            return y % 2 ** w
+
+        def twist():
+            for i in range(n):
+                x = (self.mt[i] & upper_mask) + (self.mt[(i + 1) % n] & lower_mask)
+                xa = x >> 1
+                if (x % 2) != 0:  # lowest bit of x is 1
+                    xa = xa ^ a
+                self.mt[i] = self.mt[(i + m) % n] ^ xa
+
+            self.index = 0
+
+        return extract_number

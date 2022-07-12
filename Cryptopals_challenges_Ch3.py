@@ -29,7 +29,7 @@ def challenge_3_2():
     c3_2 = AESCode(c3_2_ciphertext, 'b64', key=b'YELLOW SUBMARINE', nonce=empty_bytes(8))
     print(c3_2.ctr())
 
-    
+
 challenge_3_2()
 
 ## Challenge 3-4
@@ -62,3 +62,33 @@ def challenge_3_4c(key):
 
 
 challenge_3_4c(b'\x00')
+
+## Challenge 3-5
+# Implement the MT19937 Mersenne Twister RNG
+def challenge_3_5(seed):
+    print(MT19937(seed).rand_num_gen())
+
+
+challenge_3_5(321)
+
+## Challenge 3-7
+# Clone an MT19937 RNG from its output
+
+def challenge_3_7_a(seed: int):
+    # Creates and clones MT19937 RNG given a seed
+    c3_7_rng = MT19937(seed)
+    c3_7_clone = MT19937()
+    return c3_7_clone.clone(c3_7_rng.rand_num_gen)
+
+def challenge_3_7_b(seed: int, n: int):
+    # Checks the clone gives the same output as the original in the first n trials
+    c3_7_original = MT19937(seed)
+    c3_7_clone = challenge_3_7_a(seed)
+
+    for i in range(n):
+        assert c3_7_original.rand_num_gen() == c3_7_clone.rand_num_gen()
+
+    print(f'Clone appears to work based on {n} trials')
+
+
+challenge_3_7_b(234, 1000)

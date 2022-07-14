@@ -19,7 +19,7 @@ def challenge_3_1():
 
     # As in previous challenges, AESCode.cbc_solve solves the cipher and attempts to unpad
     # An error will be raised if unpadding runs into a problem (ex: incorrect padding)
-    c3_1.cbc_solve()
+    print(c3_1.cbc_solve().decode())
 
 
 challenge_3_1()
@@ -27,8 +27,12 @@ challenge_3_1()
 ## Challenge 3-2
 def challenge_3_2():
     c3_2_ciphertext = 'L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ=='
-    c3_2 = AESCode(c3_2_ciphertext, 'b64', key=b'YELLOW SUBMARINE', nonce=empty_bytes(8))
-    print(c3_2.ctr())
+
+    # Create ciphertext instance with given parameters and ctr decrypt
+    c3_2 = AESCode(c3_2_ciphertext, 'b64', key=b'YELLOW SUBMARINE', nonce=empty_bytes(8)).ctr()
+
+    # Print decrypted text
+    print(c3_2.easybyte.b)
 
 
 challenge_3_2()

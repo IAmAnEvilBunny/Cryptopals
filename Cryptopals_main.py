@@ -4,62 +4,17 @@ Created on 23/06/2022
 @author: Lawrence Arscott
 """
 
+##
 from random import randint
 from numpy import product as prod
-from base64 import b64encode, b64decode
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
-from os import path
 from collections.abc import Generator  # For generator type hinting
 
+# My files
+from EasyByte import EasyByte
 
-# Byte operations
-def hex_byte_hamming(hex1, hex2):
-    # Returns the Hamming distance of 2 bytes written in hex
-    assert len(hex1) == len(hex2) == 2
-    counter = 0
-    bin1 = binary(hex1, 16)
-    bin2 = binary(hex2, 16)
-    for i in range(len(bin1)):
-        counter += (int(bin1[i]) + int(bin2[i])) % 2
-
-    return counter
-
-def hex_hamming(hex1, hex2):
-    # Returns the Hamming distance between two hex strings
-
-    assert len(hex1) == len(hex2)
-
-    # Convert strings to lists of bytes (strings of length two since hex)
-    byte_list_1 = strtotwos(hex1)
-    byte_list_2 = strtotwos(hex2)
-
-    # Sum the individual Hamming distances between the bytes
-    ham = 0
-    for j in range(len(byte_list_1)):
-        ham += hex_byte_hamming(byte_list_1[j], byte_list_2[j])
-
-    return ham
-
-def xorb(ba1: bytes, key: bytes):
-    # Returns ba1 XOR key, where arguments are b strings
-    # https://nitratine.net/blog/post/xor-python-byte-strings/
-    key = resize_key(key, len(ba1))
-    return bytes([_a ^ _b for _a, _b in zip(ba1, key)])
-
-def bit_flip(bstring, byte_pos_list):
-    # Given a bytes string, XORs nth byte with b'\x01' (00000001)
-
-    flip_str = b''  # This will be XORed with bstring
-    # Create a byte string with \x01 in the positions given by byte_pos_list padded with zeros
-    for i in range(len(bstring)):
-        if i in byte_pos_list:
-            flip_str += b'\x01'
-        else:
-            flip_str += b'\x00'
-
-    return EasyByte(bstring).xor(flip_str).b
-
+# Copies
 def binary(n, scale, m=8):
     """
     Converts integer n base scale to m bits (default, m=8 for a byte)
@@ -84,6 +39,31 @@ def binary(n, scale, m=8):
         n = str(n)
     assert 0 <= int(n, scale) < 2**m  # So that integer may be written as m bits
     return bin(int(n, scale))[2:].zfill(m)
+
+# Byte operations
+def xorbytes(ba1: bytes, ba2: bytes):
+    # Returns ba1 XOR key, where arguments are b strings
+    # https://nitratine.net/blog/post/xor-python-byte-strings/
+    try:
+        assert len(ba1) == len(ba2)
+
+    except AssertionError:
+        print('Byte arrays must have the same length')
+
+    return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
+
+def bit_flip(bstring, byte_pos_list):
+    # Given a bytes string, XORs nth byte with b'\x01' (00000001)
+
+    flip_str = b''  # This will be XORed with bstring
+    # Create a byte string with \x01 in the positions given by byte_pos_list padded with zeros
+    for i in range(len(bstring)):
+        if i in byte_pos_list:
+            flip_str += b'\x01'
+        else:
+            flip_str += b'\x00'
+
+    return EasyByte(bstring).xor(flip_str).b
 
 def rand_bytes(n: int):
     # Returns a byte string composed of n random bytes
@@ -130,28 +110,7 @@ def empty_bytes(n: int):
     # Returns a byte string of length n, all bytes = \x00
     return b'\x00' * n
 
-def bit_not(n, numbits=8):
-    # Returns not n, where n is an numbits bits integer
-    # https://stackoverflow.com/questions/31151107/how-do-i-do-a-bitwise-not-operation-in-python
-    return (1 << numbits) - 1 - n
-
 # Text formatting
-def single_line_read(txtfile: str):
-    # Reads file as a single line (stripping newlines)
-    with open(txtfile) as file:
-        sngl_line = ''.join([line.rstrip('\n') for line in file])
-    return sngl_line
-
-def resize_key(key, n):
-    # Resize key to length n by repeating
-    new_key = key * (n // len(key) + 1)
-
-    return new_key[:n]  # Chop off excess
-
-def strtotwos(s: str, n=2):
-    # Splits string into list of strings of length 2
-    return [s[i:i+n] for i in range(0, len(s), n)]
-
 def str_split(text: str, n: int):
     # From a string, returns a list of strings consisting of every nth character,
     # starting from character 0, ..., n-1
@@ -169,15 +128,6 @@ def rand_line(txtdoc):
     with open(txtdoc) as file:
         lines = file.readlines()
         return lines[randint(0, len(lines) - 1)]  # Remembering lists are indexed 0 to length - 1
-
-def str_to_int_lst(int_str):
-    # Takes a string representing an integer
-    # Returns a list with one digit per entry
-    lst = []
-    for char in int_str:
-        lst.append(int(char))
-
-    return lst
 
 # Tests
 def count_special_character(string):
@@ -203,78 +153,6 @@ def simple_ch_test(ans: str, freq=7):
     return count_special_character(ans) < n
 
 # Classes
-class EasyByte:
-    """Class for the manipulation of byte strings
-
-    Attributes
-    ----------
-    b : bytes
-        Bytes string
-
-     Parameters
-    ----------
-    code : str or .txt file
-        Code to be converted to byte. This may be a string or a .txt file.
-        May be encoded in a variety of formats, see base.
-    base : str, optional
-        Base in which the code is encoded.
-        If not given, it is assumed the code is already in byte format.
-        May otherwise be 'text' for text, 'hex' for hexadecimal or 'b64' for base64
-        """
-    def __init__(self, code, base=None):
-        self.b = EasyByte.make_byte(self, code, base)
-
-    def make_byte(self, code, base=None):
-        # Translate string in multiple formats to byte string
-        # If a file is given, the file is first converted to a single line string
-        if path.isfile(code):
-            return EasyByte.make_byte(self, single_line_read(code), base)
-
-        elif not base:
-            return code
-
-        elif base == 'text':
-            return code.encode()
-
-        elif base == 'hex':
-            return bytes.fromhex(code)
-
-        elif base == 'b64':
-            return b64decode(code)
-
-        else:
-            raise Exception('Unknown format')
-
-    def convert(self, base=None):
-        # Returns byte converted to string according to base
-        if not base:
-            return self.b
-
-        elif base == 'text':
-            return self.b.decode()
-
-        elif base == 'hex':
-            return self.b.hex()
-
-        elif base == 'b64':
-            # The following works since A-Z,a-z,+,/ represent bytes that decode into that symbol
-            return b64encode(self.b).decode()
-
-        else:
-            raise Exception('Unknown format')
-
-    def xor(self, key, base=None):
-        # XORs the byte according to 'key' in 'base' format.
-        key = EasyByte.make_byte(self, key, base)
-
-        return EasyByte(xorb(self.b, key))
-
-    def hamming(self, b2, base=None):
-        # Returns the Hamming distance between the byte and a second byte 'b2',
-        # encoded according to 'base'.
-        b2 = EasyByte(b2, base)
-        return hex_hamming(self.convert('hex'), b2.convert('hex'))
-
 class VCode:
     """Class for the manipulation of messages encoded with a Vigenère cipher
 
@@ -580,10 +458,10 @@ class AESCode:
         sol = b''
         for i in range(1, len(blocks)):
             deciphered = self.cipher.decrypt(blocks[i].b)
-            unxored = xorb(deciphered, blocks[i-1].b)
+            unxored = xorbytes(deciphered, blocks[i - 1].b)
             sol += unxored
         pos1deciphered = self.cipher.decrypt(blocks[0].b)
-        pos1unxored = xorb(pos1deciphered, self.iv)
+        pos1unxored = xorbytes(pos1deciphered, self.iv)
         sol = pos1unxored + sol
         sol = unpad(sol, AES.block_size)
         print(sol)
@@ -892,218 +770,6 @@ class StreamCipher:
         # XOR bytes in the code with those yielded by the stream one at a time
         for i in range(len(self.easybyte.b)):
             xor_byte = next(self.stream)
-            encoded += xorb(self.easybyte.b[i:i+1], xor_byte)
+            encoded += xorbytes(self.easybyte.b[i:i + 1], xor_byte)
 
         return encoded
-
-class MT19937:
-    # MT19937 RNG
-    # Implementation of the pseudocode found at
-    # https://en.wikipedia.org/wiki/Mersenne_Twister#k-distribution
-    def __init__(self, seed=None):
-        # Parameters
-        (self.w, self.n, self.m, self.r) = (32, 624, 397, 31)
-        self.a = int('9908b0df', 16)
-        (self.u, self.d) = (11, int('ffffffff', 16))
-        (self.s, self.b) = (7, int('9d2c5680', 16))
-        (self.t, self.c) = (15, int('efc60000', 16))
-        self.wiki_l = 18
-        self.f = 1812433253
-
-        # Seed
-        self.seed = seed if seed else randint(1, 2 ** self.w - 1)
-
-        # Random number generation
-        self.index = 0
-        self.mt = [0]
-        self.rand_num_gen = self.mt19937()
-
-    def mt19937(self):
-        # https://en.wikipedia.org/wiki/Mersenne_Twister#k-distribution
-        lower_mask = (1 << self.r) - 1  # That is, the binary number of r 1's or 2**r - 1
-        upper_mask = bit_not(lower_mask, 32)
-        self.index = self.n
-
-        # Initialise the generator from a seed
-        def seed_mt():
-            self.mt = [0] * self.n
-            self.mt[0] = self.seed
-            for i in range(1, self.n):
-                self.mt[i] = (self.f * (self.mt[i - 1] ^ (self.mt[i - 1] >> (self.w - 2))) + i) \
-                             % 2 ** self.w
-
-        seed_mt()
-
-        def extract_number():
-            if self.index == self.n:
-                twist()
-
-            y = self.mt[self.index]
-
-            # Tempering step
-            y = self.temper(y)
-
-            self.index += 1
-
-            return y % 2 ** self.w
-
-        def twist():
-            for i in range(self.n):
-                x = (self.mt[i] & upper_mask) + (self.mt[(i + 1) % self.n] & lower_mask)
-                xa = x >> 1
-                if (x % 2) != 0:  # lowest bit of x is 1
-                    xa = xa ^ self.a
-                self.mt[i] = self.mt[(i + self.m) % self.n] ^ xa
-
-            self.index = 0
-
-        return extract_number
-
-    def temper(self, y):
-        y = y ^ ((y >> self.u) & self.d)
-        y = y ^ ((y << self.s) & self.b)
-        y = y ^ ((y << self.t) & self.c)
-        y = y ^ (y >> self.wiki_l)
-
-        return y
-
-    def untemper(self, output):
-        y = BitWordAsInt(output, self.w)
-
-        y = y.invert_x_rshift_a_xor_x(self.wiki_l)
-        y = y.invert_x_lshift_a_and_b_xor_x(self.t, self.c)
-        y = y.invert_x_lshift_a_and_b_xor_x(self.s, self.b)
-        y = y.invert_x_rshift_a_and_b_xor_x(self.u, self.d)
-
-        return y.int_b
-
-    def clone(self, rng_fun):
-        # Given self.n outputs, clones the RNG
-
-        # Extract the mt from self.n outputs
-        n_outputs = [rng_fun() for _ in range(self.n)]  # '_' signifies we don't care about the value
-        cloned_mt = [self.untemper(val) for val in n_outputs]
-
-        # Initiate clone as an RNG with the same parameters
-        clone = MT19937()
-        clone.seed = f'RNG clone'
-
-        # Clone the mt without requiring the original seed
-        clone.mt = cloned_mt
-        clone.index = 0  # The values we obtained are post twist
-
-        return clone
-
-    def stream(self, n_bytes: int = 1):
-        # Generates a stream of random bytes based on the RNG
-
-        stock = b''  # A stock of random bytes enabling us not to hold all random bytes in memory
-
-        while True:
-            # Replenish stock if not enough
-            if len(stock) < n_bytes:
-                rand_int = self.rand_num_gen()  # Obtain a new random 32-bit int from the RNG
-                stock += rand_int.to_bytes(4, byteorder='big')  # Convert to 4 bytes and add to stock
-
-            yield stock[:n_bytes]  # yield desired bytes
-
-            stock = stock[n_bytes:]  # Remove 'used up' bytes
-
-def bin_lst_to_int(lst):
-    # Takes a list where each entry represents a bit
-    # Returns an integer
-    lst = [str(i) for i in lst]
-    as_int = int(''.join(lst), 2)
-    return as_int
-
-class BitWordAsInt:
-    """Class for the manipulation of words of a certain length.
-    Initiated from an integer.
-    Ex: The length-3 word 010 represents 2.
-
-    Attributes
-    ----------
-    int_b: int
-        Integer the words represents
-    w: int
-        Length of the word
-    bin: str
-        Word represented as a string (Ex: '010')
-
-    Parameters
-    ----------
-    int_byte: int
-        Integer the words represents
-    w: int
-        Length of the word
-        """
-    def __init__(self, int_byte: int, w: int):
-        self.int_b = int_byte
-        self.w = w
-        self.bin = str_to_int_lst(binary(int_byte, 10, w))
-
-    # Properties
-    def bin_trailing_zeroes(self):
-        # Returns the number of trailing zeroes of the byte in binary format
-        # Ex: 01011000 has 3 trailing zeroes
-        counter = 0
-        for i in reversed(range(len(self.bin))):
-            if self.bin[i] == '0':
-                counter += 1
-            else:
-                break
-
-        return counter
-
-    # Inversions
-    def invert_x_rshift_a_xor_x(self, a):
-        # Solve self.int_b = x ^ (x >> a) for x
-        if 2*a < self.w:
-            raise Exception('Not one to one')
-
-        else:
-            return BitWordAsInt(self.int_b ^ (self.int_b >> a), self.w)
-
-    def invert_x_lshift_a_and_b_xor_x(self, a, b):
-        # Solve self.int_b = x ^ ((x<<a) & b) for x
-        a = BitWordAsInt(a, self.w)
-        b = BitWordAsInt(b, self.w)
-
-        # Get answer as list of bits
-        ans = list([None] * self.w)  # type: list
-
-        # Since x<<a is zero in the last a positions, we can solve for those positions:
-        for i in range(self.w - a.int_b, self.w):
-            ans[i] = self.bin[i] ^ 0
-
-        # From x_{i + a} we may obtain x_{i} and so we solve iteratively
-        for i in reversed(range(self.w - a.int_b)):
-            ans[i] = self.bin[i] ^ (ans[i + a.int_b] & b.bin[i])
-
-        # Process answer into BitWordAsInt
-        ans = bin_lst_to_int(ans)  # type: int
-        ans = BitWordAsInt(ans, self.w)  # type: BitWordAsInt
-
-        return ans
-
-    def invert_x_rshift_a_and_b_xor_x(self, a, b):
-        # Solve self.int_b = x ^ ((x>>a) & b) for x
-        a = BitWordAsInt(a, self.w)
-        b = BitWordAsInt(b, self.w)
-
-        # Get answer as list of bits
-        ans = [None] * self.w  # type: list
-
-        # Since x>>a is zero in the first a positions, we can solve for those positions:
-        for i in range(a.int_b):
-            ans[i] = self.bin[i] ^ 0
-
-        # From x_{i} we may obtain x_{i + a} and so we solve iteratively
-        for i in range(a.int_b, self.w):
-            ans[i] = self.bin[i] ^ (ans[i - a.int_b] & b.bin[i])
-
-        # Process answer into BitWordAsInt
-        ans = bin_lst_to_int(ans)  # type: int
-        ans = BitWordAsInt(ans, self.w)  # type: BitWordAsInt
-
-        return ans

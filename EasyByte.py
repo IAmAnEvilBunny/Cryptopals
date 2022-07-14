@@ -155,3 +155,18 @@ class EasyByte:
         # encoded according to 'base'.
         b2 = EasyByte(b2, base)
         return hex_hamming(self.convert('hex'), b2.convert('hex'))
+
+    def bit_flip(self, byte_pos_list):
+        # Flips the right-most bit in bytes in positions given by byte_pos_list
+        # In other words, the bytes in self.b in positions given by byte_pos_list
+        # are XORed with \x01
+
+        flip_str = b''  # This will be XORed with bstring
+        # Create a byte string with \x01 in the positions given by byte_pos_list padded with zeros
+        for i in range(len(self.b)):
+            if i in byte_pos_list:
+                flip_str += b'\x01'
+            else:
+                flip_str += b'\x00'
+
+        return self.xor(flip_str)

@@ -14,32 +14,6 @@ from collections.abc import Generator  # For generator type hinting
 # My files
 from EasyByte import EasyByte
 
-# Copies
-def binary(n, scale, m=8):
-    """
-    Converts integer n base scale to m bits (default, m=8 for a byte)
-    n may be a string or an integer
-
-    Parameters
-    ----------
-    n : str or int
-        Integer to be converted (must be between 0 and 255)
-        Given as a str in some base
-    scale : int
-        Base to which n is to be taken
-    m : int, optional
-        Number of bits to be returned (default is 8)
-
-    Returns
-    -------
-    str
-        Byte
-    """
-    if type(n) == int:
-        n = str(n)
-    assert 0 <= int(n, scale) < 2**m  # So that integer may be written as m bits
-    return bin(int(n, scale))[2:].zfill(m)
-
 # Byte operations
 def xorbytes(ba1: bytes, ba2: bytes):
     # Returns ba1 XOR key, where arguments are b strings
@@ -51,19 +25,6 @@ def xorbytes(ba1: bytes, ba2: bytes):
         print('Byte arrays must have the same length')
 
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
-
-def bit_flip(bstring, byte_pos_list):
-    # Given a bytes string, XORs nth byte with b'\x01' (00000001)
-
-    flip_str = b''  # This will be XORed with bstring
-    # Create a byte string with \x01 in the positions given by byte_pos_list padded with zeros
-    for i in range(len(bstring)):
-        if i in byte_pos_list:
-            flip_str += b'\x01'
-        else:
-            flip_str += b'\x00'
-
-    return EasyByte(bstring).xor(flip_str).b
 
 def rand_bytes(n: int):
     # Returns a byte string composed of n random bytes

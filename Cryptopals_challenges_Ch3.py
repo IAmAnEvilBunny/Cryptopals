@@ -1,4 +1,5 @@
 from Cryptopals_main import *
+from MT19937 import MT19937
 
 ## Challenge 3-1
 def challenge_3_1():

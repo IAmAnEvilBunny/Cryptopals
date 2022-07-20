@@ -1,9 +1,11 @@
-from Cryptopals_main import *
-
-## Challenge 4-2
+# Challenge 4-2
 # CTR bitflipping
 
-def challenge_4_2():
+from Cryptopals_main import AESCode
+from Cryptopals_main import gen_sandwich
+from EasyByte import EasyByte
+
+def main():
     # String function for the challenge
     c4_2_str_fun = gen_sandwich(b"comment1=cooking%20MCs;userdata=",
                                 b";comment2=%20like%20a%20pound%20of%20bacon",
@@ -21,7 +23,10 @@ def challenge_4_2():
 
     # Check we have desired result
     assert b';admin=true;' in c4_2.ctr().easybyte.b
+    
+    # Print success
     print('Challenge 4-2 passed !')
 
 
-challenge_4_2()
+if __name__ == "__main__":
+    main()

@@ -2,6 +2,8 @@
 Implementation of the pseudocode for the SHA-1 has function, found at
 https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 
+SHA-1 is a 20-byte hash function
+
 @author: Lawrence Arscott
 """
 
@@ -94,3 +96,16 @@ def sha_1(msg: bytes):
         hh = ((h0 << 128) | (h1 << 96) | (h2 << 64) | (h3 << 32) | h4) % (2 ** 160)
 
         return hh.to_bytes(20, 'big')
+
+# And
+def check_mac(c_text: bytes, key: bytes):
+    # Message authentification
+    # Checks the received ciphertext is of form:
+    # ciphertext | SHA1(key|ciphertext)
+
+    # Separate received bytes into ciphertext and mac
+    msg = c_text[:-20]
+    mac = c_text[-20:]  # SHA1 -> 20 bytes
+
+    # Perform check
+    assert sha_1(key + msg) == mac

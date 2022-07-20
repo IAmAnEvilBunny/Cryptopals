@@ -10,6 +10,12 @@ Particularly useful for inverting certain operations of the RNG.
 
 ##
 from random import randint
+from IntAsWord import IntAsWord
+
+# Operations
+def bit_not(n, numbits=8):
+    # Returns not n, where n is a 'numbits' bits integer
+    return (1 << numbits) - 1 - n
 
 # MT19937 RNG
 class MT19937:
@@ -91,7 +97,7 @@ class MT19937:
         y = y.invert_x_lshift_a_and_b_xor_x(self.s, self.b)
         y = y.invert_x_rshift_a_and_b_xor_x(self.u, self.d)
 
-        return y.int_b
+        return y.as_int
 
     def clone(self, rng_fun):
         # Given self.n outputs, clones the RNG
@@ -124,146 +130,3 @@ class MT19937:
             yield stock[:n_bytes]  # yield desired bytes
 
             stock = stock[n_bytes:]  # Remove 'used up' bytes
-
-# Functions for class IntAsWord
-# Conversions
-def binary(n, scale, m=8):
-    """
-    Converts integer n base scale to m bits (default, m=8 for a byte)
-    n may be a string or an integer
-
-    Parameters
-    ----------
-    n : str or int
-        Integer to be converted (must be between 0 and 255)
-        Given as a str in some base
-    scale : int
-        Base to which n is to be taken
-    m : int, optional
-        Number of bits to be returned (default is 8)
-
-    Returns
-    -------
-    str
-        Byte
-    """
-    if type(n) == int:
-        n = str(n)
-    assert 0 <= int(n, scale) < 2**m  # So that integer may be written as m bits
-    return bin(int(n, scale))[2:].zfill(m)
-
-# Operations
-def bit_not(n, numbits=8):
-    # Returns not n, where n is a 'numbits' bits integer
-    # https://stackoverflow.com/questions/31151107/how-do-i-do-a-bitwise-not-operation-in-python
-    return (1 << numbits) - 1 - n
-
-# Words as lists of 0s and 1s
-def str_to_int_lst(int_str):
-    # Takes a string representing an integer
-    # Returns a list with one digit per entry
-    lst = []
-    for char in int_str:
-        lst.append(int(char))
-
-    return lst
-
-def bin_lst_to_int(lst):
-    # Takes a list where each entry represents a bit
-    # Returns an integer
-    lst = [str(i) for i in lst]
-    as_int = int(''.join(lst), 2)
-    return as_int
-
-# Word manipulation class
-class IntAsWord:
-    """Class for the manipulation of words of a certain length.
-    Initiated from an integer.
-    Ex: The length-3 word 010 represents 2.
-
-    Attributes
-    ----------
-    int_b: int
-        Integer the words represents
-    w: int
-        Length of the word
-    bin: str
-        Word represented as a string (Ex: '010')
-
-    Parameters
-    ----------
-    int_byte: int
-        Integer the words represents
-    w: int
-        Length of the word
-        """
-    def __init__(self, int_byte: int, w: int):
-        self.int_b = int_byte
-        self.w = w
-        self.bin = str_to_int_lst(binary(int_byte, 10, w))
-
-    # Properties
-    def bin_trailing_zeroes(self):
-        # Returns the number of trailing zeroes of the byte in binary format
-        # Ex: 01011000 has 3 trailing zeroes
-        counter = 0
-        for i in reversed(range(len(self.bin))):
-            if self.bin[i] == '0':
-                counter += 1
-            else:
-                break
-
-        return counter
-
-    # Inversions
-    def invert_x_rshift_a_xor_x(self, a):
-        # Solve self.int_b = x ^ (x >> a) for x
-        if 2*a < self.w:
-            raise Exception('Not one to one')
-
-        else:
-            return IntAsWord(self.int_b ^ (self.int_b >> a), self.w)
-
-    def invert_x_lshift_a_and_b_xor_x(self, a, b):
-        # Solve self.int_b = x ^ ((x<<a) & b) for x
-        a = IntAsWord(a, self.w)
-        b = IntAsWord(b, self.w)
-
-        # Get answer as list of bits
-        ans = list([None] * self.w)  # type: list
-
-        # Since x<<a is zero in the last a positions, we can solve for those positions:
-        for i in range(self.w - a.int_b, self.w):
-            ans[i] = self.bin[i] ^ 0
-
-        # From x_{i + a} we may obtain x_{i} and so we solve iteratively
-        for i in reversed(range(self.w - a.int_b)):
-            ans[i] = self.bin[i] ^ (ans[i + a.int_b] & b.bin[i])
-
-        # Process answer into IntAsWord
-        ans = bin_lst_to_int(ans)  # type: int
-        ans = IntAsWord(ans, self.w)  # type: IntAsWord
-
-        return ans
-
-    def invert_x_rshift_a_and_b_xor_x(self, a, b):
-        # Solve self.int_b = x ^ ((x>>a) & b) for x
-        a = IntAsWord(a, self.w)
-        b = IntAsWord(b, self.w)
-
-        # Get answer as list of bits
-        ans = [None] * self.w  # type: list
-
-        # Since x>>a is zero in the first a positions, we can solve for those positions:
-        for i in range(a.int_b):
-            ans[i] = self.bin[i] ^ 0
-
-        # From x_{i} we may obtain x_{i + a} and so we solve iteratively
-        for i in range(a.int_b, self.w):
-            ans[i] = self.bin[i] ^ (ans[i - a.int_b] & b.bin[i])
-
-        # Process answer into IntAsWord
-        ans = bin_lst_to_int(ans)  # type: int
-        ans = IntAsWord(ans, self.w)  # type: IntAsWord
-
-        return ans

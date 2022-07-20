@@ -5,7 +5,7 @@ https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 @author: Lawrence Arscott
 """
 
-from MT19937 import IntAsWord
+from IntAsWord import IntAsWord
 
 # Operations
 def bit_not(n, numbits=8):

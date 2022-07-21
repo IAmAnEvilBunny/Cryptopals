@@ -14,21 +14,17 @@ def bit_not(n, numbits=8):
     # Returns not n, where n is a 'numbits' bits integer
     return (1 << numbits) - 1 - n
 
-# Main
-def sha_1(msg: bytes):
-    # Declare variables
-    h0 = 0x67452301
-    h1 = 0xEFCDAB89
-    h2 = 0x98BADCFE
-    h3 = 0x10325476
-    h4 = 0xC3D2E1F0
-
+def pad(msg: bytes, extending: int = 0):
+    # Pre-processing: padding
+    # Extending allows us to pad as if 'extending' bytes were prepended to msg
     ml = len(msg) * 8  # Length of message in bits
 
-    # Pre-processing
-    msg += b'\x80'
+    if extending:  # Used for extend function: pad taking into account message beforehand
+        ml += extending * 8
 
-    # Append 0 ≤ k < 512 bits '0', such that the resulting message length in bits
+    msg += b'\x80'  # Append a 1
+
+    # Append 0 ≤ k < 512 bits b'\x00', such that the resulting message length in bits
     # is congruent to −64 ≡ 448 (mod 512)
     msg += ((56 - len(msg)) % 64) * b'\x00'
 
@@ -36,6 +32,19 @@ def sha_1(msg: bytes):
     # Thus, the total length is a multiple of 512 bits/64 bytes.
     msg += ml.to_bytes(8, 'big')
     assert len(msg) % 64 == 0
+
+    return msg
+
+# Main
+def sha_1(msg: bytes,
+          h0=0x67452301,
+          h1=0xEFCDAB89,
+          h2=0x98BADCFE,
+          h3=0x10325476,
+          h4=0xC3D2E1F0,
+          extending=0):
+
+    msg = pad(msg, extending)
 
     # Process the message in successive 512-bit chunks:
     # Break message into 512-bit chunks
@@ -92,10 +101,11 @@ def sha_1(msg: bytes):
         h3 = (h3 + d) % 2 ** 32
         h4 = (h4 + e) % 2 ** 32
 
-        # Produce the final hash value (big-endian) as a 160-bit number:
-        hh = ((h0 << 128) | (h1 << 96) | (h2 << 64) | (h3 << 32) | h4) % (2 ** 160)
+    # Produce the final hash value (big-endian) as a 160-bit number
+    # (simply append the 5 32-bit SHA-1 registers):
+    hh = ((h0 << 128) | (h1 << 96) | (h2 << 64) | (h3 << 32) | h4)
 
-        return hh.to_bytes(20, 'big')
+    return hh.to_bytes(20, 'big')
 
 # And
 def check_mac(c_text: bytes, key: bytes):
@@ -109,3 +119,21 @@ def check_mac(c_text: bytes, key: bytes):
 
     # Perform check
     assert sha_1(key + msg) == mac
+
+def extend(shaed: bytes, extension: bytes, len_og_msg: int):
+    # Extend a SHA-ed message with 'extension'
+    # Length of original message is required
+    # Note that since we are rerunning SHA, the result will be:
+    # SHA1(pad(pad(original) + extension))
+    
+    # Obtain parameters a, b, c, d, e where SHA-1 would have left off
+    bin_rep = IntAsWord(int.from_bytes(shaed, 'big'), 160)
+
+    a = int(bin_rep.bin_str(None, 32), 2)
+    b = int(bin_rep.bin_str(32, 64), 2)
+    c = int(bin_rep.bin_str(64, 96), 2)
+    d = int(bin_rep.bin_str(96, 128), 2)
+    e = int(bin_rep.bin_str(128, None), 2)
+    
+    # Restart SHA with those parameters and further bytes to SHA
+    return sha_1(extension, a, b, c, d, e, len_og_msg)

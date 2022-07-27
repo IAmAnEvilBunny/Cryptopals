@@ -107,7 +107,10 @@ def sha_1(msg: bytes,
 
     return hh.to_bytes(20, 'big')
 
-# And
+# Basic mac
+def gen_mac(c_text: bytes, key: bytes):
+    return sha_1(key + c_text)
+
 def check_mac(c_text: bytes, key: bytes):
     # Message authentification
     # Checks the received ciphertext is of form:
@@ -125,7 +128,7 @@ def extend(shaed: bytes, extension: bytes, len_og_msg: int):
     # Length of original message is required
     # Note that since we are rerunning SHA, the result will be:
     # SHA1(pad(pad(original) + extension))
-    
+
     # Obtain parameters a, b, c, d, e where SHA-1 would have left off
     bin_rep = IntAsWord(int.from_bytes(shaed, 'big'), 160)
 
@@ -134,6 +137,45 @@ def extend(shaed: bytes, extension: bytes, len_og_msg: int):
     c = int(bin_rep.bin_str(64, 96), 2)
     d = int(bin_rep.bin_str(96, 128), 2)
     e = int(bin_rep.bin_str(128, None), 2)
-    
+
     # Restart SHA with those parameters and further bytes to SHA
     return sha_1(extension, a, b, c, d, e, len_og_msg)
+
+# HMAC
+# Using pseudocode from https://en.wikipedia.org/wiki/HMAC
+def blocksize_key(key: bytes, hash_f: callable, b_size: int):
+    # Transforms key to make it b_size bytes long
+    # For use in function hmac
+
+    # Keys longer than b_size are shortened by hashing them
+    if len(key) > b_size:
+        key = hash_f(key)
+
+    # Keys shorter than b_size are padded to b_size by padding with zeros on the right
+    if len(key) < b_size:
+        key = key + b'\x00' * (b_size - len(key))
+
+    return key
+
+def hmac(key: bytes, msg: bytes, base=None):
+    # Returns hmac(msg)
+    from EasyByte import EasyByte
+
+    key = EasyByte(blocksize_key(key, sha_1, 64))
+
+    o_key = key.xor(b'\x5c' * 64).b
+    i_key = key.xor(b'\x36' * 64).b
+
+    return EasyByte(sha_1(o_key + sha_1(i_key + msg))).convert(base)
+
+def check_hmac(c_text: bytes, key: bytes):
+    # Message authentification
+    # Checks the received ciphertext is of form:
+    # ciphertext | SHA1-HMAC(key|ciphertext)
+
+    # Separate received bytes into ciphertext and mac
+    msg = c_text[:-20]
+    mac = c_text[-20:]  # SHA1 -> 20 bytes
+
+    # Perform check
+    assert hmac(key, msg) == mac

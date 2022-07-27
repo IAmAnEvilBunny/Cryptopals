@@ -4,7 +4,10 @@ Classes related to Diffie-Hellman key exchange
 
 from random import randint
 from Cryptopals_main import AESCode
+from Cryptopals_main import rand_bytes
 from SHA_1 import sha_1
+from hashlib import sha256
+import hmac
 
 # Large number operations
 def power_mod(b, e, m):
@@ -207,3 +210,122 @@ class DHReceiver:
         int_as_bytes = self.s.to_bytes(192, 'big')  # Transform integer to bytes
 
         return sha_1(int_as_bytes)[0:16]  # Hash and return 16-byte key
+
+class DHMITM:
+    def __init__(self,
+                 p=int('ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc'
+                       '74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f'
+                       '14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f4'
+                       '06b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8'
+                       'a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f3'
+                       '56208552bb9ed529077096966d670c354e4abc9804f1746c08ca237327ffff'
+                       'ffffffffffff', 16),
+                 g=2):
+        self.p = p
+        self.g = g
+        self.A = None
+        self.B = None
+        self.A_msg = None
+        self.B_msg = None
+        self.s = 0
+        self.key = self.gen_key()
+        self.iv = None
+
+    def gen_key(self):
+        # From the integer self.s, generates a key to be used for encryption
+        int_as_bytes = self.s.to_bytes(192, 'big')  # Transform integer to bytes
+
+        return sha_1(int_as_bytes)[0:16]  # Hash and return 16-byte key
+
+class Server:
+    def __init__(self, email: bytes, password: bytes,
+                 p=int('ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc'
+                       '74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f'
+                       '14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f4'
+                       '06b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8'
+                       'a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f3'
+                       '56208552bb9ed529077096966d670c354e4abc9804f1746c08ca237327ffff'
+                       'ffffffffffff', 16),
+                 g=2, k=3):
+        self.N = p
+        self.g = g
+        self.k = k
+        self.E = email
+        self.P = password
+        self.salt = self.gen_salt()
+        self.v = self.gen_v()  # Password verifier
+        self.A = None
+        self.b = randint(0, p)
+        self.B = (k * self.v + power_mod(g, self.b, p)) % p
+        self.u = None  # Random scrambling parameter
+        self.K = None
+        self.h = None
+
+    def gen_salt(self):
+        # Generates a 64-bit salt
+        return rand_bytes(8)
+
+    def gen_v(self):
+        # Password verifier
+
+        # Create private key
+        xH = sha256(self.salt + self.P)  # Hash salt|password
+        x = int(xH.hexdigest(), 16)  # Convert hash to integer
+
+        return power_mod(self.g, x, self.N)
+
+    def gen_u(self):
+        # Random scrambling parameter
+        uH = sha256(str(self.A).encode() + str(self.B).encode())  # Hash A|B
+        u = int(uH.hexdigest(), 16)  # Convert hash to integer
+
+        return u
+
+    def gen_K(self):
+        S = power_mod(self.A * power_mod(self.v, self.u, self.N),
+                      self.b, self.N)
+        K = sha256(str(S).encode()).digest()
+
+        return K
+
+    def gen_h(self):
+        # Calculates session key
+        return hmac.new(self.K, self.salt, sha256).digest()
+
+class Client:
+    def __init__(self, email: bytes, password: bytes,
+                 p=int('ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc'
+                       '74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f'
+                       '14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f4'
+                       '06b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8'
+                       'a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f3'
+                       '56208552bb9ed529077096966d670c354e4abc9804f1746c08ca237327ffff'
+                       'ffffffffffff', 16),
+                 g=2, k=3):
+        self.N = p
+        self.g = g
+        self.k = k
+        self.E = email
+        self.P = password
+        self.salt = None
+        self.a = randint(0, p)
+        self.A = power_mod(g, self.a, p)
+        self.B = None
+        self.u = None  # Random scrambling parameter
+        self.K = None
+
+    def gen_u(self):
+        # Random scrambling parameter
+        uH = sha256(str(self.A).encode() + str(self.B).encode())  # Hash A|B
+        u = int(uH.hexdigest(), 16)  # Convert hash to integer
+
+        return u
+
+    def gen_K(self):
+        xH = sha256(self.salt + self.P)  # Hash salt|password
+        x = int(xH.hexdigest(), 16)  # Convert hash to integer
+        S = power_mod((self.B - self.k * power_mod(self.g, x, self.N)),
+                      self.a + self.u * x, self.N)
+        K = sha256(str(S).encode()).digest()  # Convert int S to bytes and hash
+
+        return K

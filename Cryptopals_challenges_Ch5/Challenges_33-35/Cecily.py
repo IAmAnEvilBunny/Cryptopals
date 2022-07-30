@@ -1,7 +1,8 @@
-# MITM
+# Cecily is the MITM in a standard Diffie-Hellman key exchange protocol
 
 import socket
-from DH import *
+from Cryptopals_main import AESCode
+from DH import DHMITM
 
 # Initiate Cecily
 cecily = DHMITM()
@@ -28,18 +29,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             # Cecily receives A from Alice
             data_A = s.recv(1024)
-            cecily.A = int.from_bytes(data_A, 'big')
+            cecily.A = int(data_A.decode())
 
             # Cecily sends p instead of A to Bob
-            to_send = cecily.p.to_bytes(192, 'big')
+            to_send = str(cecily.p).encode()
             conn.sendall(to_send)
 
             # Cecily receives B from Bob
             data = conn.recv(1024)
-            cecily.B = int.from_bytes(data, 'big')
+            cecily.B = int(data.decode())
 
             # Cecily sends p instead of A to Alice
-            to_send = cecily.p.to_bytes(192, 'big')
+            to_send = str(cecily.p).encode()
             s.sendall(to_send)
 
             # Receive iv and ciphertext from A
@@ -65,7 +66,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             # Pass it on to A
             s.sendall(cecily.B_msg)
 
-            # Decode Alice's and Bob's messages
+            # Decode Alice's and Bob's messages TODO: below could go in class
             A_decoded = AESCode(cecily.A_msg, key=cecily.key, iv=cecily.iv).cbc_solve().decode()
             B_decoded = AESCode(cecily.B_msg, key=cecily.key, iv=cecily.iv).cbc_solve().decode()
             print(f'Alice said {A_decoded}')

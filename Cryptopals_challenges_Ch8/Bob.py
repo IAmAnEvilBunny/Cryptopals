@@ -1,8 +1,8 @@
-##
-# echo-client.py
+# Bob is the receiver in a standard Diffie-Hellman key exchange protocol
+# Cryptopals chapter 8
 
 import socket
-from DH import *
+from DH import DHReceiver
 
 # Initiate Bob
 bob = DHReceiver(p=int('8977C3217DA1F838B8D24B4A790DE8FC8E35AD5483E463028EF9BBF9AF23A9BD1231EBA9A'
@@ -13,7 +13,6 @@ bob = DHReceiver(p=int('8977C3217DA1F838B8D24B4A790DE8FC8E35AD5483E463028EF9BBF9
 
 print(f'Secret key is {bob.b}')
 
-factors = [2, 5, 109, 7963, 8539, 20641, 38833, 39341, 46337, 51977, 54319, 57529]
 # Address
 HOST = "127.0.0.1"  # The server's hostname or IP address
 PORT = 65432  # The port used by the server
@@ -50,10 +49,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f'Key is {bob.key}')
 
         # Send message
-        bob.reply = 'Crazy flamboyant for the rap enjoyment'
+        bob.reply = b'Crazy flamboyant for the rap enjoyment'
 
         # Prepare message and cipher for reply
-        bob.encode = bob.gen_encode()
+        bob.encode = bob.gen_code(bob.reply)
 
         # Send encrypted message
         ciphertext = bob.encode.cbc_encrypt().easybyte.b  # ciphertext

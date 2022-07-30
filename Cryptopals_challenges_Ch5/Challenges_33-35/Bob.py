@@ -1,8 +1,7 @@
-##
-# echo-client.py
+# Bob is the receiver in a standard Diffie-Hellman key exchange protocol
 
 import socket
-from DH import *
+from DH import DHReceiver
 
 # Initiate Bob
 bob = DHReceiver()
@@ -18,10 +17,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # Communicate
     # Bob receives A
     data_A = s.recv(1024)
-    bob.A = int.from_bytes(data_A, 'big')
+    bob.A = int(data_A.decode())
 
     # Bob sends B
-    to_send = bob.B.to_bytes(192, 'big')
+    to_send = str(bob.B).encode()
     s.sendall(to_send)
 
     # Bob calculates key
@@ -39,15 +38,15 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # Create cipher
     bob.key = bob.gen_key()
     print(f'Key is {bob.key}')
-    bob.decode = bob.gen_decode()
+    bob.decode = bob.gen_code(bob.rec_msg)
 
     # Decode and request answer
     print(bob.decode.cbc_solve())
     print('What is your reply ?')
-    bob.reply = input()
+    bob.reply = input().encode()
 
     # Prepare message and cipher for reply
-    bob.encode = bob.gen_encode()
+    bob.encode = bob.gen_code(bob.reply)
 
     # Send encrypted message
     to_send = bob.encode.cbc_encrypt().easybyte.b

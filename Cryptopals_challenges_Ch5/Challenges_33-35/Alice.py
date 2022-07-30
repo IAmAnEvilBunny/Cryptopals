@@ -1,8 +1,8 @@
 import socket
-from DH import *
+from DH import DHSender
 
 # Initiate Alice, argument is message we wish to send
-alice = DHSender('Hello')
+alice = DHSender(b'Hello')
 
 # Address
 HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
@@ -19,12 +19,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f"Connected by {addr}")
 
         # Alice sends A
-        to_send = alice.A.to_bytes(192, 'big')
+        to_send = str(alice.A).encode()
         conn.sendall(to_send)
 
         # Alice receives B
         data = conn.recv(1024)
-        alice.B = int.from_bytes(data, 'big')
+        alice.B = int(data.decode())
 
         # Alice calculates key
         alice.s = alice.gen_s()
@@ -33,7 +33,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # Create cipher
         alice.key = alice.gen_key()
         print(f'Key is {alice.key}')
-        alice.encode = alice.gen_encode()  # Holds message and cipher
+        alice.encode = alice.gen_code(alice.msg_to_send)  # Holds message and cipher
 
         # Send iv
         alice.iv = alice.encode.iv
@@ -51,7 +51,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f'Received encrypted message:\n{alice.rec_msg}')
 
         # Prepare message for decoding
-        alice.decode = alice.gen_decode()
+        alice.decode = alice.gen_code(alice.rec_msg)
 
         # Decode
         print(alice.decode.cbc_solve())

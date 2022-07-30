@@ -1,8 +1,11 @@
+# Alice is the sender in a standard Diffie-Hellman key exchange protocol
+# Cryptopals chapter 8
+
 import socket
-from DH import *
+from DH import DHSender
 
 # Initiate Alice, argument is message we wish to send
-alice = DHSender('Hello',
+alice = DHSender(b'Hello',
                  p=int('8977C3217DA1F838B8D24B4A790DE8FC8E35AD5483E463028EF9BBF9AF23A9BD1231EBA9A'
                        'C7E44363D8311D610B09AA224A023268EE8A60AC484FD9381962563', 16),
                  g=int('572AFF4A93EC6214C1036C62E1818FE5E4E1D6DB635C1B12D9572203C47D241A0E543A89B'
@@ -38,7 +41,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # Create cipher
         alice.key = alice.gen_key()
         print(f'Key is {alice.key}')
-        alice.encode = alice.gen_encode()  # Holds message and cipher
+        alice.encode = alice.gen_code(alice.msg_to_send)  # Holds message and cipher
 
         # Send iv
         alice.iv = alice.encode.iv
@@ -51,10 +54,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f'Received encrypted message:\n{alice.rec_msg}')
 
         # Prepare message for decoding
-        alice.decode = alice.gen_decode_hmac()
+        alice.decode = alice.gen_decode_hmac(alice.rec_msg)
 
         # Decode
         print(alice.decode.cbc_solve())
-        
+
         # End connection
         conn.sendall(b'STOP')

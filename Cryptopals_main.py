@@ -5,6 +5,7 @@ Created on 23/06/2022
 """
 
 ##
+from math import isqrt
 from random import randint
 from numpy import product as prod
 from Crypto.Cipher import AES
@@ -779,6 +780,8 @@ def crt(p_factors, rems):
         n_i = p // p_factor
 
         # Find a solution to (n_i * x_i) % p_factor == rem by brute force
+        print(f'Searching for solution to {n_i} * x % {p_factor} = {rem}')
+
         while summands[i] == 0:
             x_i = randint(1, p_factor)
 
@@ -786,15 +789,19 @@ def crt(p_factors, rems):
             if (n_i * x_i) % p_factor == rem:
                 summands[i] = n_i * x_i
 
+        print(f'{i+1}/{n_factors} Chinese factors dealt with')
+
     # The solution is unique mod p
     return sum(summands) % p
 
 def g_el_to_scalar(y, k):
     # Pseudorandom function used in disc_log
-    return pow(2, y, k)
+    p_rand = pow(2, y, k)
+    return p_rand if p_rand != 0 else 1
 
 def disc_log(g:int, start: int, end: int, m: int, y:int, f: callable = g_el_to_scalar):
     """
+    Pollard's Method for Catching Kangaroos
     Find x such that g**x mod m = y, with the knowledge that x is between start and end.
     Context: Cyclic groups, ex: multiplication of integers mod m
 
@@ -844,7 +851,7 @@ def disc_log(g:int, start: int, end: int, m: int, y:int, f: callable = g_el_to_s
 
         # Show progress every so many jumps
         counter += 1
-        if counter % 1000 == 0:
+        if counter % 10000 == 0:
             print(f'{counter}/{big_n}')
 
     # Wild kangaroo catches up to tame kangaroo

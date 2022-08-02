@@ -788,3 +788,83 @@ def crt(p_factors, rems):
 
     # The solution is unique mod p
     return sum(summands) % p
+
+def g_el_to_scalar(y, k):
+    # Pseudorandom function used in disc_log
+    return pow(2, y, k)
+
+def disc_log(g:int, start: int, end: int, m: int, y:int, f: callable = g_el_to_scalar):
+    """
+    Find x such that g**x mod m = y, with the knowledge that x is between start and end.
+    Context: Cyclic groups, ex: multiplication of integers mod m
+
+    Parameters
+    ----------
+    g : int
+        Group element we are taking powers of, usually a generator of the group
+    start : int
+        Lowest suspected integer such that g**x = y
+    end : int
+        Greatest suspected integer such that g**x = y
+    m: int
+        Modulo parameter: tells us we are dealing with the cyclic group of intgers mod m
+    y: int
+        Group element we are trying to invert
+    f: callable
+        Pseudorandom function f:G->S taking group elements to scalars
+
+    Returns
+    -------
+    int, optional
+        If x is found such that g**x = y, returns said x
+    """
+    n = end - start  # Length of interval in which the index lies
+    k = isqrt(n) // 2 + 3
+    print(f'k is {k}')
+    big_n = 2 * k
+
+    def f2(x):
+        return f(x, k)
+
+    # Tame kangaroo
+    xT = 0
+    yT = pow(g, end, m)
+
+    # Wild kangaroo
+    xW = 0
+    yW = y
+
+    counter = 0  # Follow progress
+
+    # Tame kangaroo jumps
+    for _ in range(big_n):
+        jump = f2(yT)  # Function gives us pseudorandom jumpsize
+        yT = (yT * pow(g, jump, m)) % m  # Kangaroo jumps
+        xT += jump  # Keep track how far kangaro has jumped (yT *= xT so far)
+
+        # Show progress every so many jumps
+        counter += 1
+        if counter % 1000 == 0:
+            print(f'{counter}/{big_n}')
+
+    # Wild kangaroo catches up to tame kangaroo
+    # Distance to cover is between xT and n + xT
+    while xW < n + xT:
+        jump = f2(yW)  # Function gives us pseudorandom jumpsize
+        yW = (yW * pow(g, jump, m)) % m   # Kangaroo jumps
+        xW += jump  # Keep track how far kangaro has jumped (yW *= xW so far)
+
+        # Check whether paths have coincided
+        # yW will either land on yT or skip past
+        if yW == yT:
+            ans = end + xT - xW
+            assert pow(g, ans, m) == y  # Check our answer
+            return ans
+
+        # Show progress every so often
+        counter += 1
+        if counter % 100000 == 0:
+            print(f'{xW}/{xT + n}')
+
+    # If we get this far, the algorithm has not found a solution
+    print('Kangaroo has not been caught')

@@ -5,7 +5,7 @@ Now with subclasses.
 
 from random import randint
 from Cryptopals_main import AESCode
-from Cryptopals_main import rand_bytes
+from Cryptopals_main import rand_bytes, disc_log
 from hashlib import sha256
 import hmac
 
@@ -274,6 +274,46 @@ class DHAttacker(DH):
                  g=2, q=None):
         super().__init__(p, g, q)
         self.rec_msg = b''
+        self.pub_key = None
+        self.part_key = None
+        self.part_key_mod = None
+
+    def _prep_kangaroo(self):
+        # Prepares variables for method kangaroo
+
+        # Transform g
+        new_g = pow(self.g, self.part_key_mod, self.p)
+
+        # Calculate inverse of g, using the fact the group has order p-1
+        g_inv = pow(self.g, self.p - 2, self.p)
+        assert (self.g * g_inv) % self.p == 1  # Check this is an inverse
+
+        # Transform y
+        g_to_minus_part_key = pow(g_inv, self.part_key, self.p)
+        new_y = (self.pub_key * g_to_minus_part_key) % self.p
+
+        # Calculate greatest x s.t. new_y = new_g**x
+        end = (self.q - 1) // self.part_key_mod + 1
+
+        return new_g, new_y, end
+
+    def kangaroo(self):
+        # Given our knowledge of defender's private key, (i.e. its modulus modulo some integer <p),
+        # and the public key, calculates the private key using:
+        # Pollard's Method for Catching Kangaroos
+
+        # Transform variables, obtaining the continuous interval required for the method
+        new_g, new_y, end = self._prep_kangaroo()
+
+        # Call kangaroo method
+        new_index = disc_log(new_g, 0, end, self.p, new_y)
+
+        # Transform back to get the private key
+        ans = (self.part_key + new_index * self.part_key_mod) % self.q
+
+        assert pow(self.g, ans, self.p) == self.pub_key
+
+        return ans
 
 class Server:
     def __init__(self, email: bytes, password: bytes,

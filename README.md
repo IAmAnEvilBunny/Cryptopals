@@ -16,7 +16,8 @@ xored_easybyte = my_bytes2.xor('zRGIiLolJWYBZplUdt2qEA==', 'b64')  # Obtain my_b
 print(xored_easybyte.convert('text'))  # Obtain result as text, in this case prints 'YELLOW SUBMARINE'
 ```
 
-### Cryptopals_main
+
+### Cryptopals_main.py
 Main file which contains classes relevant for encryption/decryption. Examples are VCode for Vigenère ciphers and AESCode for AES.
 #### Advanced Encryption Standard (AES):<br>ECB, CBC and CTR encryption modes with AESCode class
 An AESCode instance is used to store byte string to be encrypted/decrypted along with all information needed for encryption/decryption.
@@ -32,3 +33,7 @@ print(encrypted.easybyte.b)  # Prints encrypted byte b'\xf0f\xf0\x1e\xec]|'...
 print(encrypted.cbc_solve())  # Prints b'One cappuccino please.'
 ```
 You may recognise the first two parameters (plaintext and format) as EasyByte parameters. This is because AESCode stores messages as EasyByte instances throughout.
+
+
+### DH class: Diffie-Hellman key exchange
+DH.py contains the DH class as well as various subclasses involved in a Diffie-Hellman key exchange protocol. Examples include DHSender (initiates exchange), DHReceiver (partner in key exchange), DHMITM (MITM: Man In The Middle, for cryptographic attacks of the same name), DHAttacker (Hacker taking the place of DHSender wishing to extract DHReceiver's secret key)

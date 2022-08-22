@@ -3,7 +3,7 @@
 
 import socket
 from DH import DHReceiver
-from Group import ModP
+from Group import ModP, CycGroup
 
 # Initiate Bob
 our_q = 335062023296420808191071248367701059461
@@ -12,9 +12,10 @@ our_p = int('DB020645333C52A8D8BD194950CBD48DDF752BAE8F346150C6410DBA6BEFDBC6CF9
 our_g = int('BE4ED76592B0FC7A8F2A160840C664BD8A4E0DFF8DED0B2ED0843714C3B7BD12EE50CB56A829A999CA957'
             '14A520BA0C080E7A5866309E4BBCCE1F897EAFB77D', 16)
 
-our_group = ModP(p=our_p, g=our_g, q=our_q)
+our_group = ModP(p=our_p)
+our_cyclic_group = CycGroup.from_generator(our_group, our_g, our_q)
 
-bob = DHReceiver(our_group)
+bob = DHReceiver(our_cyclic_group)
 
 print(f'Secret key is {bob.b}')
 

@@ -8,7 +8,7 @@ from Cryptopals_main import AESCode
 from Cryptopals_main import rand_bytes
 from hashlib import sha256
 import hmac
-from Group import AbGroup
+from Group import CycGroup
 
 # Large number operations
 def power_mod(b, e, m):
@@ -54,8 +54,8 @@ class DH:
 
     Attributes
     ----------
-    group: AbGroup
-        AbGroup object: holds group parameters and group element g
+    group: CycGroup
+        CycGroup object: holds group parameters and group element g
         which we use as the generator for a cyclic group
     A: int
         A = g**a mod p
@@ -73,11 +73,11 @@ class DH:
 
     Parameters
     ----------
-    group: AbGroup
+    group: CycGroup
         AbGroup object: holds group parameters and group element g
         from which a cyclic group is to be generated
     """
-    def __init__(self, group: AbGroup):
+    def __init__(self, group: CycGroup):
         self.group = group
         self.A = None
         self.B = None
@@ -87,7 +87,9 @@ class DH:
 
     def gen_key(self):
         # From the element self.s, generates a key to be used for encryption
-        key_bytes = self.group.prep_key(self.s)  # Transform integer to bytes
+        assert type(self.s) == int
+
+        key_bytes = str(self.s).encode()  # Transform integer to bytes
 
         return sha256(key_bytes).digest()[0:16]  # Hash and return 16-byte key
 
@@ -143,11 +145,11 @@ class DHSender(DH):
     msg: bytes
         Message to be sent (plaintext)
     """
-    def __init__(self, msg: bytes, group: AbGroup):
+    def __init__(self, msg: bytes, group: CycGroup):
         super().__init__(group)
         self.msg_to_send = msg
         self.a = randint(0, group.q - 1)
-        self.A = group.scale(self.a)
+        self.A = group.scale(group.g, self.a)
         self.encode = None
         self.rec_msg = None
         self.decode = None
@@ -157,7 +159,7 @@ class DHSender(DH):
     def gen_s(self):
         # Returns group element sender and receiver have agreed upon,
         # This will be transformed to bytes from which a key will be hashed
-        return self.group.scale(self.a, self.B)
+        return self.group.scale(self.B, self.a)
 
 class DHReceiver(DH):
     """Receiver in a standard Diffie-Hellman key exchange protocol
@@ -180,10 +182,10 @@ class DHReceiver(DH):
     Parameters
     ----------
     """
-    def __init__(self, group: AbGroup):
+    def __init__(self, group: CycGroup):
         super().__init__(group)
         self.b = randint(0, group.q - 1)
-        self.B = group.scale(self.b)
+        self.B = group.scale(group.g, self.b)
         self.encode = None
         self.rec_msg = None
         self.decode = None
@@ -193,7 +195,7 @@ class DHReceiver(DH):
     def gen_s(self):
         # Returns integer sender and receiver have agreed upon,
         # from which a key will be hashed
-        return self.group.scale(self.b, self.A)
+        return self.group.scale(self.A, self.b)
 
 class DHMITM(DH):
     """Man in the middle: intercepts messages from Alice, modifies them to his convenience
@@ -214,7 +216,7 @@ class DHMITM(DH):
     Parameters
     ----------
     """
-    def __init__(self, group: AbGroup):
+    def __init__(self, group: CycGroup):
         super().__init__(group)
         self.A_msg = None
         self.B_msg = None
@@ -233,25 +235,38 @@ class DHAttacker(DH):
     Parameters
     ----------
     """
-    def __init__(self, group: AbGroup):
+    def __init__(self, group: CycGroup):
         super().__init__(group)
         self.rec_msg = b''
         self.pub_key = None
         self.part_key = None
         self.part_key_mod = None
 
+    def key_mod(self, h, m):
+        # rec_msg has mac generated with key h**i for some i, with h**m = id
+        # This program finds i through brute force
+        i = 0
+        while i < m:
+            self.s = self.group.scale(h, i)
+            potential_key = self.gen_key()
+            if check_hmac(self.rec_msg, potential_key):
+                return i  # We have cracked secret key mod factor
+            i += 1
+
+        raise Exception('Error: no value found')
+
     def _prep_kangaroo(self):
         # Prepares variables for method kangaroo
 
         # Transform g
-        new_g = self.group.scale(self.part_key_mod)
+        new_g = self.group.scale(self.group.g, self.part_key_mod)
 
         # Calculate inverse of g, using the fact the group has order p-1
-        g_inv = self.group.scale(self.group.q - 1)
+        g_inv = self.group.scale(self.group.g, self.group.q - 1)
         assert self.group.add(self.group.g, g_inv) == 1  # Check this is an inverse
 
         # Transform y
-        g_to_minus_part_key = self.group.scale(self.part_key, g_inv)
+        g_to_minus_part_key = self.group.scale(g_inv, self.part_key)
         new_y = self.group.add(self.pub_key, g_to_minus_part_key)
 
         # Calculate greatest x s.t. new_y = new_g**x
@@ -266,17 +281,18 @@ class DHAttacker(DH):
 
         # Transform variables, obtaining the continuous interval required for the method
         new_g, new_y, end = self._prep_kangaroo()
-        new_g = self.group.new_element(new_g)
 
-        print(f'new_g:{new_g.g}\nnew_y:{new_y}')
+        # Declare new group
+        # TODO: optional order
+        new_group = CycGroup.from_generator(self.group, new_g, None)
 
         # Call kangaroo method
-        new_index = new_g.disc_log(0, end, new_y)
+        new_index = new_group.disc_log(0, end, new_g, new_y)
 
         # Transform back to get the private key
         ans = (self.part_key + new_index * self.part_key_mod) % self.group.q
 
-        assert self.group.scale(ans) == self.pub_key
+        assert self.group.scale(self.group.g, ans) == self.pub_key
 
         return ans
 

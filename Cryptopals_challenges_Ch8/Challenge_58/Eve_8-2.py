@@ -5,18 +5,20 @@
 import socket
 from DH import *
 from Cryptopals_main import crt
-from Group import ModP
+from Group import ModP, CycGroup
 
+# Parameters
 our_q = 335062023296420808191071248367701059461
 our_p = int('DB020645333C52A8D8BD194950CBD48DDF752BAE8F346150C6410DBA6BEFDBC6CF93D7CFC4568FFB017B2'
             '8BEF26242493C606596B7FF8625055F73E888B86117', 16)
 our_g = int('BE4ED76592B0FC7A8F2A160840C664BD8A4E0DFF8DED0B2ED0843714C3B7BD12EE50CB56A829A999CA957'
             '14A520BA0C080E7A5866309E4BBCCE1F897EAFB77D', 16)
 
-our_group = ModP(p=our_p, g=our_g, q=our_q)
+our_group = ModP(p=our_p)
+our_cyclic_group = CycGroup.from_generator(our_group, our_g, our_q)
 
 # Initiate Eve
-eve = DHAttacker(our_group)
+eve = DHAttacker(our_cyclic_group)
 
 # Some small factors of (p-1) / q
 factors = [2, 12457, 14741, 18061, 31193, 33941, 63803]
@@ -46,7 +48,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             h = 1
             while h == 1:
                 guess = randint(2, our_p - 1)
-                h = our_group.scale((our_p - 1) // factor, guess)
+                h = our_group.scale(guess, (our_p - 1) // factor)
+
+            print('boop')
+            print(pow(h, factor, our_p))
 
             # Eve sends h
             to_send = str(h).encode()  # Convert to bytes
@@ -62,15 +67,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             eve.rec_msg = conn.recv(1024)
             print(f'Received encrypted message:\n{eve.rec_msg}')
 
-            # Brute force the mac, only 'factor' possibilities
-            i = 0
-            while powers[j] is None and i < factor:
-                eve.s = our_group.scale(i, h)
-                potential_key = eve.gen_key()
-                if check_hmac(eve.rec_msg, potential_key):
-                    # noinspection PyTypeChecker
-                    powers[j] = i  # We have cracked secret key mod factor
-                i += 1
+            # Brute force the key mod factor by repeatedly testing the mac.
+            # Only 'factor' possibilities
+            powers[j] = eve.key_mod(h, factor)
 
         # End connection
         conn.sendall(b'STOP')

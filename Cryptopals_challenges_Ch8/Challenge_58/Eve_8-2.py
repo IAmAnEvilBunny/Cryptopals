@@ -45,10 +45,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             assert (our_p - 1) % factor == 0  # Check factor divides order of group
 
             # Generate h, an element of order factor
-            h = 1
-            while h == 1:
-                guess = randint(2, our_p - 1)
-                h = our_group.scale(guess, (our_p - 1) // factor)
+            h = our_cyclic_group.gen_order(factor)
 
             print('boop')
             print(pow(h, factor, our_p))

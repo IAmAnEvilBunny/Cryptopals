@@ -25,6 +25,7 @@ class Group:
     def __init__(self):
         self.add = self._trivial_add
         self.id = 1
+        self.q = None
 
     @staticmethod
     def _trivial_add(g1, g2):
@@ -44,16 +45,20 @@ class Group:
 
         return result
 
-    def gen_order(self, desired_order: int, grp_order: int):
+    def gen_order(self, desired_order: int):
         # Generate an element of order desired_order
+
+        # Requires group order
+        if self.q is None:
+            raise Exception('Requires group order')
+
         h = self.id
         while h == self.id:
-            guess = randint(2, grp_order)
-            h = self.scale(guess, grp_order // desired_order)
+            guess = randint(2, self.q)
+            h = self.scale(guess, self.q // desired_order)
 
         return h
 
-    # TODO: This is ModP centric
     # noinspection PyPep8Naming
     def disc_log(self, start: int, end: int, g, y, f: callable = g_el_to_scalar):
         """
@@ -273,7 +278,7 @@ class CycGroup(Group):
     add_fun: callable
         Function defining how to add two group elements
     """
-    def __init__(self, order: int, identity, g, add_fun: callable):
+    def __init__(self, order, identity, g, add_fun: callable):
         super().__init__()
         self.add = add_fun
         self.q = order
@@ -285,4 +290,9 @@ class CycGroup(Group):
         # Cyclic group is generated from an element of another group
         # This group will have order the order of the element
         return cls(order, group.id, element, group.add)
-    
+
+    def gen_order(self, desired_order):
+        # Returns an element of order desired_order
+        power = self.q // desired_order
+
+        return self.scale(self.g, power)
